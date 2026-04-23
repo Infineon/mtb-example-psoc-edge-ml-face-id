@@ -6,33 +6,33 @@
 * Related Document : See README.md
 *
 ********************************************************************************
- * (c) 2023-2026, Infineon Technologies AG, or an affiliate of Infineon
- * Technologies AG. All rights reserved.
- * This software, associated documentation and materials ("Software") is
- * owned by Infineon Technologies AG or one of its affiliates ("Infineon")
- * and is protected by and subject to worldwide patent protection, worldwide
- * copyright laws, and international treaty provisions. Therefore, you may use
- * this Software only as provided in the license agreement accompanying the
- * software package from which you obtained this Software. If no license
- * agreement applies, then any use, reproduction, modification, translation, or
- * compilation of this Software is prohibited without the express written
- * permission of Infineon.
- *
- * Disclaimer: UNLESS OTHERWISE EXPRESSLY AGREED WITH INFINEON, THIS SOFTWARE
- * IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
- * INCLUDING, BUT NOT LIMITED TO, ALL WARRANTIES OF NON-INFRINGEMENT OF
- * THIRD-PARTY RIGHTS AND IMPLIED WARRANTIES SUCH AS WARRANTIES OF FITNESS FOR A
- * SPECIFIC USE/PURPOSE OR MERCHANTABILITY.
- * Infineon reserves the right to make changes to the Software without notice.
- * You are responsible for properly designing, programming, and testing the
- * functionality and safety of your intended application of the Software, as
- * well as complying with any legal requirements related to its use. Infineon
- * does not guarantee that the Software will be free from intrusion, data theft
- * or loss, or other breaches ("Security Breaches"), and Infineon shall have
- * no liability arising out of any Security Breaches. Unless otherwise
- * explicitly approved by Infineon, the Software may not be used in any
- * application where a failure of the Product or any consequences of the use
- * thereof can reasonably be expected to result in personal injury.
+* (c) 2025-2026, Infineon Technologies AG, or an affiliate of Infineon
+* Technologies AG. All rights reserved.
+* This software, associated documentation and materials ("Software") is
+* owned by Infineon Technologies AG or one of its affiliates ("Infineon")
+* and is protected by and subject to worldwide patent protection, worldwide
+* copyright laws, and international treaty provisions. Therefore, you may use
+* this Software only as provided in the license agreement accompanying the
+* software package from which you obtained this Software. If no license
+* agreement applies, then any use, reproduction, modification, translation, or
+* compilation of this Software is prohibited without the express written
+* permission of Infineon.
+*
+* Disclaimer: UNLESS OTHERWISE EXPRESSLY AGREED WITH INFINEON, THIS SOFTWARE
+* IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+* INCLUDING, BUT NOT LIMITED TO, ALL WARRANTIES OF NON-INFRINGEMENT OF
+* THIRD-PARTY RIGHTS AND IMPLIED WARRANTIES SUCH AS WARRANTIES OF FITNESS FOR A
+* SPECIFIC USE/PURPOSE OR MERCHANTABILITY.
+* Infineon reserves the right to make changes to the Software without notice.
+* You are responsible for properly designing, programming, and testing the
+* functionality and safety of your intended application of the Software, as
+* well as complying with any legal requirements related to its use. Infineon
+* does not guarantee that the Software will be free from intrusion, data theft
+* or loss, or other breaches ("Security Breaches"), and Infineon shall have
+* no liability arising out of any Security Breaches. Unless otherwise
+* explicitly approved by Infineon, the Software may not be used in any
+* application where a failure of the Product or any consequences of the use
+* thereof can reasonably be expected to result in personal injury.
 *******************************************************************************/
 
 /*******************************************************************************
@@ -75,9 +75,7 @@ QueueHandle_t _NewFrameMailBox;
 VideoBuffer_t    _ImageBuff[NUM_IMAGE_BUFFERS];
 
 volatile uint8_t _device_connected = USB_DEVICE_DISCONNECTED;
-static U8 _aVIDEO_DevIndexes[MAX_VIDEO_INTERFACES];
 static char _ac[USB_STRING_BUFFER_SIZE];
-static char _acMBEvent[USB_MB_EVENT_SIZE];
 
 volatile uint8_t lastBuffer = RESET_VALUE_INDEX;
 bool Logitech_camera_enabled = RESET_VALUE_INDEX;
@@ -100,8 +98,8 @@ CY_SECTION_ITCM_BEGIN
 ********************************************************************************
 * Summary:
 *  Callback function invoked when a USB device is added or removed. Runs in the
-*  context of the USBH_Task and performs non-blocking operations to update 
-*  device connection status, reset buffer states, and signal the LCD task via a 
+*  context of the USBH_Task and performs non-blocking operations to update
+*  device connection status, reset buffer states, and signal the LCD task via a
 *  queue as a mailbox.
 *
 * Parameters:
@@ -125,7 +123,8 @@ static void _cbOnAddRemoveDevice ( void *pContext, U8 DevIndex, USBH_DEVICE_EVEN
 
         /* **IMPROVED**: More thorough buffer reset on device connect */
         printf("[USB] Resetting all buffer states for new device\r\n");
-        for (int i = NUM_LOOP_START; i < NUM_IMAGE_BUFFERS; i++) {
+        for (int i = NUM_LOOP_START; i < NUM_IMAGE_BUFFERS; i++)
+        {
             _ImageBuff[i].BufReady = USB_BUFFER_CLEAR_VALUE;
             _ImageBuff[i].NumBytes = USB_BUFFER_CLEAR_VALUE;
         }
@@ -145,7 +144,8 @@ static void _cbOnAddRemoveDevice ( void *pContext, U8 DevIndex, USBH_DEVICE_EVEN
 
         /* **IMPROVED**: Clean shutdown */
         printf("[USB] Cleaning up buffer states for removed device\r\n");
-        for (int i = NUM_LOOP_START; i < NUM_IMAGE_BUFFERS; i++) {
+        for (int i = NUM_LOOP_START; i < NUM_IMAGE_BUFFERS; i++)
+        {
             _ImageBuff[i].BufReady = USB_BUFFER_CLEAR_VALUE;
             _ImageBuff[i].NumBytes = USB_BUFFER_CLEAR_VALUE;
         }
@@ -177,12 +177,14 @@ static void _cbOnAddRemoveDevice ( void *pContext, U8 DevIndex, USBH_DEVICE_EVEN
 *  void
 *
 *******************************************************************************/
-static void monitor_buffer_health(void) {
+static void monitor_buffer_health(void)
+{
     static float last_health_check = RESET_VALUE_INDEX;
     float current_time = ifx_time_get_ms_f();
 
     /* Check every 2 seconds */
-    if (current_time - last_health_check > USB_HEALTH_CHECK_INTERVAL_MS) {
+    if (current_time - last_health_check > USB_HEALTH_CHECK_INTERVAL_MS)
+    {
 
         last_health_check = current_time;
     }
@@ -193,9 +195,9 @@ static void monitor_buffer_health(void) {
 * Function Name: _cbOnData
 ********************************************************************************
 * Summary:
-*  Callback function invoked when a USB video device buffer is ready. Handles 
+*  Callback function invoked when a USB video device buffer is ready. Handles
 *  data copying, error management, frame validation, and buffer state updates
-*  with atomic operations. Manages end-of-frame processing and stream error 
+*  with atomic operations. Manages end-of-frame processing and stream error
 *  recovery.
 *
 * Parameters:
@@ -231,24 +233,36 @@ static void _cbOnData(
     bool endOfFrame;
     I8 IsStreamStopped;
 
-    if (Status != USBH_STATUS_SUCCESS) {
+    if (Status != USBH_STATUS_SUCCESS)
+    {
 
         _StreamErrCnt++;
-        if (_StreamErrCnt >= USB_STREAM_ERROR_THRESHOLD) {
+        if (_StreamErrCnt >= USB_STREAM_ERROR_THRESHOLD)
+        {
             Status1 = USBH_STATUS_DEVICE_ERROR; /* Indicate failure. */
-        } else {
-            if ((Status != USBH_STATUS_DEVICE_REMOVED)) {
+        }
+        else
+        {
+            if ((Status != USBH_STATUS_DEVICE_REMOVED))
+            {
                 Status1 = USBH_VIDEO_GetStreamState(hStream, &IsStreamStopped);
-                if (Status1 == USBH_STATUS_SUCCESS) {
-                    if (IsStreamStopped == NUM_STREAM_STOPPED) {
+                if (Status1 == USBH_STATUS_SUCCESS)
+                {
+                    if (IsStreamStopped == NUM_STREAM_STOPPED)
+                    {
                         Status1 = USBH_VIDEO_RestartStream(hStream);
-                        if (Status1!= USBH_STATUS_SUCCESS) {
+                        if (Status1!= USBH_STATUS_SUCCESS)
+                        {
                             USBH_Logf_Application("_cbOnData: USBH_VIDEO_RestartStream failed %s", USBH_GetStatusStr(Status));
                         }
-                    } else {
+                    }
+                    else
+                    {
                         USBH_Warnf_Application("_cbOnData: _StreamErrCnt %d, but stream is running", _StreamErrCnt);
                     }
-                } else {
+                }
+                else
+                {
                     USBH_Logf_Application("_cbOnData: USBH_VIDEO_GetStreamState failed %s", USBH_GetStatusStr(Status));
                 }
             }
@@ -260,7 +274,8 @@ static void _cbOnData(
             or the stream could not be restarted - remove the video device.
          */
         if ((Status == USBH_STATUS_DEVICE_REMOVED) ||
-                (Status1  != USBH_STATUS_SUCCESS)) {
+                (Status1  != USBH_STATUS_SUCCESS))
+        {
             USBH_Logf_Application("_cbOnData device removed or max conseq. errors exceeded");
             U8 disconnect_event = ERROR_DEVICE_DISCONNECTED;
             xQueueSend(_DeviceStateMailBox, &disconnect_event, USB_MAILBOX_NO_WAIT); /* 0 = no wait */
@@ -278,8 +293,8 @@ static void _cbOnData(
     endOfFrame = (Flags & USBH_UVC_END_OF_FRAME) == USBH_UVC_END_OF_FRAME;
 
     /* Validate buffer index */
-    if (_current_Buffer >= NUM_IMAGE_BUFFERS) {
-
+    if (_current_Buffer >= NUM_IMAGE_BUFFERS)
+    {
         _current_Buffer = RESET_VALUE_INDEX;
         _frame_bytes = RESET_VALUE_INDEX;
         _throw_away_frame = NUM_THROW_AWAY_FRAME;
@@ -288,9 +303,11 @@ static void _cbOnData(
     }
 
     /* Check if we should throw away this frame */
-    if (_throw_away_frame) {
+    if (_throw_away_frame)
+    {
         _frame_bytes = RESET_VALUE_INDEX;
-        if (endOfFrame) {
+        if (endOfFrame)
+        {
             _throw_away_frame = RESET_VALUE_INDEX;
         }
         USBH_VIDEO_Ack(hStream);
@@ -298,11 +315,14 @@ static void _cbOnData(
     }
 
     /* Copy data with bounds checking */
-    if (_frame_bytes + NumBytes <= CAMERA_BUFFER_SIZE) {
+    if (_frame_bytes + NumBytes <= CAMERA_BUFFER_SIZE)
+    {
         memcpy(((uint8_t *)usb_yuv_frames[_current_Buffer].memory) + _frame_bytes,
                 pData, NumBytes);
         _frame_bytes += NumBytes;
-    } else {
+    }
+    else
+    {
 
 #if 0
         leftover_bytes = (_frame_bytes + NumBytes) - CAMERA_BUFFER_SIZE;
@@ -318,8 +338,10 @@ static void _cbOnData(
     }
 
     /* Handle end of frame */
-    if (endOfFrame) {
-        if (_frame_bytes == CAMERA_BUFFER_SIZE) {
+    if (endOfFrame)
+    {
+        if (_frame_bytes == CAMERA_BUFFER_SIZE)
+        {
 
             /* **KEY CHANGE**: More robust buffer management
              First, mark current buffer as ready ATOMICALLY */
@@ -484,7 +506,7 @@ static const char* _FrameType2Str ( U8 Type )
 *  details like focal lengths and control size, if applicable.
 *
 * Parameters:
-*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information 
+*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information
 *  structure
 *
 * Return:
@@ -520,7 +542,7 @@ static void _PrintInputTermInfo ( USBH_VIDEO_TERM_UNIT_INFO *pTermInfo )
 *  terminal ID and source ID, if applicable.
 *
 * Parameters:
-*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information 
+*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information
 *  structure
 *
 * Return:
@@ -549,7 +571,7 @@ static void _PrintOutputTermInfo ( USBH_VIDEO_TERM_UNIT_INFO *pTermInfo )
 *  pin details.
 *
 * Parameters:
-*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information 
+*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information
 *  structure
 *
 * Return:
@@ -577,7 +599,7 @@ static void _PrintSelectorUnitInfo ( USBH_VIDEO_TERM_UNIT_INFO *pTermInfo )
 *  ID, max multiplier, and control size.
 *
 * Parameters:
-*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information 
+*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information
 *  structure
 *
 * Return:
@@ -601,7 +623,7 @@ static void _PrintProcessingUnitInfo ( USBH_VIDEO_TERM_UNIT_INFO *pTermInfo )
  *  number of pins, and control size.
 *
 * Parameters:
-*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information 
+*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information
 *  structure
 *
 * Return:
@@ -625,7 +647,7 @@ static void _PrintExtensionUnitInfo ( USBH_VIDEO_TERM_UNIT_INFO *pTermInfo )
 *  print functions based on the terminal/unit type.
 *
 * Parameters:
-*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information 
+*  USBH_VIDEO_TERM_UNIT_INFO *pTermInfo: Pointer to the terminal information
 *  structure
 *
 * Return:
@@ -696,7 +718,7 @@ static void _OnDevReady ( U8 DevIndex )
     unsigned    i;
     unsigned    j;
     unsigned    k;
-    U8          MBEvent;
+    U8          MBEvent = 0;
     U32         FrameIntervalfrmvidpid;
     /*
       Open the device, the device index is retrieved from the notification callback.
@@ -713,13 +735,15 @@ static void _OnDevReady ( U8 DevIndex )
     float timeout_ms = NUM_TIMEOUT_MS_5000; /* 5 seconds timeout */
 
     Status = USBH_VIDEO_Open( DevIndex, &hDevice );
-    if ( Status != USBH_STATUS_SUCCESS ) {
+    if ( Status != USBH_STATUS_SUCCESS )
+    {
         USBH_Logf_Application("USBH_VIDEO_Open returned with error: %s", USBH_GetStatusStr(Status));
         return;
     }
 
     Status = USBH_VIDEO_GetInterfaceInfo( hDevice, &IfaceInfo );
-    if ( Status != USBH_STATUS_SUCCESS ) {
+    if ( Status != USBH_STATUS_SUCCESS )
+    {
         USBH_Logf_Application("USBH_VIDEO_GetInterfaceInfo returned with error: %s", USBH_GetStatusStr(Status));
         return;
     }
@@ -757,9 +781,11 @@ static void _OnDevReady ( U8 DevIndex )
     /*
      List all terminals/units
      */
-     for ( i = NUM_LOOP_START; i < IfaceInfo.NumTermUnits; i++ ) {
+     for ( i = NUM_LOOP_START; i < IfaceInfo.NumTermUnits; i++ )
+     {
          /* Check if we've been waiting too long for initialization */
-         if ((ifx_time_get_ms_f() - timeout_start_time) > timeout_ms) {
+         if ((ifx_time_get_ms_f() - timeout_start_time) > timeout_ms)
+         {
              USBH_Logf_Application("Timeout waiting for device initialization during terminal enumeration. Resetting...");
              Found = NUM_FOUND_FLAG;
              /*
@@ -771,11 +797,14 @@ static void _OnDevReady ( U8 DevIndex )
          }
 
          Status = USBH_VIDEO_GetTermUnitInfo( hDevice, i, &TermInfo );
-         if ( Status == USBH_STATUS_SUCCESS ) {
-             _PrintTermUnitInfo(&TermInfo);
+         if ( Status == USBH_STATUS_SUCCESS )
+         {
+            _PrintTermUnitInfo(&TermInfo);
 
-         } else {
-             USBH_Logf_Application("USBH_VIDEO_GetTermUnitInfo returned with error: %s", USBH_GetStatusStr(Status));
+         }
+         else
+         {
+            USBH_Logf_Application("USBH_VIDEO_GetTermUnitInfo returned with error: %s", USBH_GetStatusStr(Status));
          }
      }
 
@@ -783,16 +812,22 @@ static void _OnDevReady ( U8 DevIndex )
      This sets the text information fields and the webcam frame window visible.
       */
      memset( &IfaceInfo, 0, sizeof(IfaceInfo) );
-     if ( Status != USBH_STATUS_SUCCESS && Status != USBH_STATUS_NOT_FOUND ) {
+     if ( Status != USBH_STATUS_SUCCESS && Status != USBH_STATUS_NOT_FOUND )
+     {
          USBH_Logf_Application("USBH_VIDEO_GetFirstTermUnitInfo returned with error: %s", USBH_GetStatusStr(Status));
-     } else {
+     }
+     else
+     {
          /*
          Configure the VIDEO device.
           */
          Status = USBH_VIDEO_GetInputHeader( hDevice, &InputHeaderInfo );
-         if ( Status != USBH_STATUS_SUCCESS ) {
+         if ( Status != USBH_STATUS_SUCCESS )
+         {
              USBH_Logf_Application("USBH_VIDEO_GetInputHeader returned with error: %s", USBH_GetStatusStr(Status));
-         } else {
+         }
+         else
+         {
              USBH_Logf_Application(
                      "Video Interface with index %d (%d formats reported, still capture method %d):",
                      DevIndex,
@@ -801,21 +836,27 @@ static void _OnDevReady ( U8 DevIndex )
              /*
              Iterate over all formats
               */
-             for ( i = 0; i < InputHeaderInfo.bNumFormats; i++ ) {
+             for ( i = 0; i < InputHeaderInfo.bNumFormats; i++ )
+             {
                  /* Check if we've been waiting too long for initialization */
-                 if ((ifx_time_get_ms_f() - timeout_start_time) > timeout_ms) {
+                 if ((ifx_time_get_ms_f() - timeout_start_time) > timeout_ms)
+                 {
                      USBH_Logf_Application("Timeout waiting for device initialization during format discovery. Resetting...");
                      Found = NUM_FOUND_FLAG; /* Ensure we don't try to use this device */
                      break; /* Exit format discovery loop */
                  }
 
                  Status = USBH_VIDEO_GetFormatInfo(hDevice, i, &Format);
-                 if ( Status != USBH_STATUS_SUCCESS ) {
+                 if ( Status != USBH_STATUS_SUCCESS )
+                 {
                      USBH_Logf_Application(
                              "USBH_VIDEO_GetFormatInfo returned with error: %s",
                              USBH_GetStatusStr(Status));
-                 } else {
-                     switch ( Format.FormatType ) {
+                 }
+                 else
+                 {
+                     switch ( Format.FormatType )
+                     {
                      case USBH_VIDEO_VS_FORMAT_UNCOMPRESSED :
                          NumFrameDescriptors = Format.u.UncompressedFormat.bNumFrameDescriptors;
                          break;
@@ -832,15 +873,19 @@ static void _OnDevReady ( U8 DevIndex )
                      /*
                      If we have a valid format type - proceed with parsing.
                       */
-                      if ( Status == USBH_STATUS_SUCCESS ) {
+                      if ( Status == USBH_STATUS_SUCCESS )
+                      {
                           USBH_Logf_Application("  Format Index %d, type %s:", i, _FormatType2Str(Format.FormatType));
                           /*
                          Check if the format has a color matching descriptor
                            */
                           Status = USBH_VIDEO_GetColorMatchingInfo(hDevice, i, &ColorInfo);
-                          if ( Status != USBH_STATUS_SUCCESS ) {
+                          if ( Status != USBH_STATUS_SUCCESS )
+                          {
                               USBH_Logf_Application("  No color matching descriptor (%s)", USBH_GetStatusStr(Status));
-                          } else {
+                          }
+                          else
+                          {
                               USBH_Logf_Application(
                                       "  Color matching descriptor: bColorPrimaries 0x%x, bTransferCharacteristics 0x%x, bMatrixCoefficients 0x%x",
                                       ColorInfo.bColorPrimaries,
@@ -852,7 +897,8 @@ static void _OnDevReady ( U8 DevIndex )
                            */
                           for ( j = 0; j < NumFrameDescriptors; j++ ) {
                               /* Check timeout during frame discovery */
-                              if ((ifx_time_get_ms_f() - timeout_start_time) > timeout_ms) {
+                              if ((ifx_time_get_ms_f() - timeout_start_time) > timeout_ms)
+                              {
                                   USBH_Logf_Application("Timeout waiting for device initialization during frame discovery. Resetting...");
                                   Found = NUM_FOUND_FLAG;
                                   break; /* Exit frame discovery loop */
@@ -863,8 +909,11 @@ static void _OnDevReady ( U8 DevIndex )
                                   USBH_Logf_Application(
                                           "USBH_VIDEO_GetFrameInfo returned with error: %s",
                                           USBH_GetStatusStr(Status));
-                              } else {
-                                  if ( Frame.bFrameIntervalType == 0 ) {
+                              }
+                              else
+                              {
+                                  if ( Frame.bFrameIntervalType == 0 )
+                                  {
                                       /*
                                      Frame interval type zero (continuous frame interval)
                                      is almost never used by any device.
@@ -880,7 +929,9 @@ static void _OnDevReady ( U8 DevIndex )
                                               Frame.u.dwMinFrameInterval,
                                               Frame.u.dwMaxFrameInterval,
                                               Frame.u.dwFrameIntervalStep);
-                                  } else {
+                                  }
+                                  else
+                                  {
                                       _GetFrameIntervals(&Frame);
                                       USBH_Logf_Application(
                                               "    Frame Index %d, type %s, x %d, y %d, intervals (%d): { %s }",
@@ -893,14 +944,16 @@ static void _OnDevReady ( U8 DevIndex )
                                       /*
                                       Try to find a setting which matches our defines
                                        */
-                                      if ( Format.FormatType == FORMAT ) {
+                                      if ( Format.FormatType == FORMAT )
+                                      {
                                           if ( (Frame.wHeight == CAMERA_HEIGHT) && (Frame.wWidth == CAMERA_WIDTH) ) {
                                               for ( k = 0; k < Frame.bFrameIntervalType; k++ )
                                               {
 
                                                   if (Frame.u.dwFrameInterval[k] == FrameIntervalfrmvidpid)
                                                   {
-                                                      if ( Found != 1u ) {
+                                                      if ( Found != 1u )
+                                                      {
                                                           RequestedFormatIdx = i;
                                                           RequestedFrameIdx = j;
                                                           RequestedFrameIntervalIdx = k + 1;
@@ -926,7 +979,8 @@ static void _OnDevReady ( U8 DevIndex )
              }
 
              /*If we didn't find an exact format match, try to use first available format */
-             if (Found != 1u && InputHeaderInfo.bNumFormats > 0) {
+             if (Found != 1u && InputHeaderInfo.bNumFormats > 0)
+             {
                  USBH_Logf_Application("WARNING: Couldn't find exact requested format. Using first available format instead.");
                  /* Fall back to first available format if any exist */
                  RequestedFormatIdx = 0;
@@ -941,7 +995,8 @@ static void _OnDevReady ( U8 DevIndex )
           */
          memset(&StreamInfo, 0, sizeof(USBH_VIDEO_STREAM_CONFIG));
          StreamInfo.Flags = 0;
-         if ( Found == 1u ) {
+         if ( Found == 1u )
+         {
              StreamInfo.FormatIdx       = RequestedFormatIdx;
              StreamInfo.FrameIdx        = RequestedFrameIdx;
              StreamInfo.FrameIntervalIdx = RequestedFrameIntervalIdx;
@@ -954,28 +1009,39 @@ static void _OnDevReady ( U8 DevIndex )
              xQueueReset(_DeviceStateMailBox);
 
              Status = USBH_VIDEO_OpenStream( hDevice, &StreamInfo, &Stream );
-             if ( Status != USBH_STATUS_SUCCESS ) {
+             if ( Status != USBH_STATUS_SUCCESS )
+             {
                  USBH_Logf_Application("USBH_VIDEO_OpenStream returned with error: %s", USBH_GetStatusStr(Status));
-             } else {
+             }
+             else
+             {
                  /*
                   Wait until the device has been disconnected.
                   */
-                 for ( ;; ) {
+                 for ( ;; )
+                 {
                      /* Check for stalled camera frames */
                      float current_time = ifx_time_get_ms_f();
-                     if ((current_time - last_check_time) > 1000) {
+                     if ((current_time - last_check_time) > 1000)
+                     {
                          /* Check once per second */
                          last_check_time = current_time;
                      }
                      /* checking if the queue operation was successful */
-                     if (  xQueueReceive(_DeviceStateMailBox, &MBEvent, pdMS_TO_TICKS(100)) == pdTRUE ) {
-                         if (MBEvent == ERROR_DEVICE_DISCONNECTED) {
+                     if (  xQueueReceive(_DeviceStateMailBox, &MBEvent, pdMS_TO_TICKS(100)) == pdTRUE )
+                     {
+                         if (MBEvent == ERROR_DEVICE_DISCONNECTED)
+                         {
                              USBH_Logf_Application("USBH_VIDEO_OpenStream breaking - Device was disconnected");
                              break;
-                         } else if (MBEvent == ERROR_TRANSFER_STATUS) {
+                         }
+                         else if (MBEvent == ERROR_TRANSFER_STATUS)
+                         {
                              USBH_Logf_Application("USBH_VIDEO_OpenStream breaking - Transfer status error");
                              break;
-                         } else {
+                         }
+                         else
+                         {
                              USBH_Logf_Application("USBH_VIDEO_OpenStream received unknown error code: 0x%02x", MBEvent);
 
                              if(_device_connected)
@@ -985,7 +1051,9 @@ static void _OnDevReady ( U8 DevIndex )
                      }
                  }
              }
-         } else {
+         }
+         else
+         {
              /*
               Display error text until webcam is removed
               */
@@ -1051,9 +1119,9 @@ void USBH_ISRTask_Wrapper(void *arg) {
 * Function Name: cm55_usb_webcam_task
 ********************************************************************************
 * Summary:
-*  Main task for handling USB webcam functionality on the CM55 processor. 
-*  Initializes the USB host stack, creates USB host and interrupt tasks, sets 
-*  up notification callbacks, and processes device connection events via a queue 
+*  Main task for handling USB webcam functionality on the CM55 processor.
+*  Initializes the USB host stack, creates USB host and interrupt tasks, sets
+*  up notification callbacks, and processes device connection events via a queue
 *  as mailbox.
 *
 * Parameters:
@@ -1073,26 +1141,29 @@ void cm55_usb_webcam_task( void *arg )
 
     USBH_Init();
     xRes = xTaskCreate(USBH_Task_Wrapper, "USBH_Task", task_stack_size_bytes, NULL, (uint8_t) TASK_PRIO_USBH_MAIN, &usbh_main_task_handle);
-    if (xRes != pdPASS) {
+    if (xRes != pdPASS)
+    {
         CY_ASSERT(0);
     }
 
     xRes = xTaskCreate(USBH_ISRTask_Wrapper, "USBH_isr", task_stack_size_bytes, NULL, (uint8_t) TASK_PRIO_USBH_ISR, &usbh_isr_task_handle);
-    if (xRes != pdPASS) {
+    if (xRes != pdPASS)
+    {
         CY_ASSERT(0);
     }
 
-    _VIDEO_MailBox = xQueueCreate(SEGGER_COUNTOF(_aVIDEO_DevIndexes), sizeof(U8));
+    _VIDEO_MailBox = xQueueCreate(MAX_VIDEO_INTERFACES, sizeof(U8));
     configASSERT(_VIDEO_MailBox != NULL);
 
-    _DeviceStateMailBox = xQueueCreate(sizeof(_acMBEvent)/sizeof(U8), sizeof(U8));
+    _DeviceStateMailBox = xQueueCreate(USB_MB_EVENT_SIZE, sizeof(U8));
     configASSERT(_DeviceStateMailBox != NULL);
 
     USBH_VIDEO_Init();
     USBH_VIDEO_AddNotification( &Hook, _cbOnAddRemoveDevice, NULL );
 
     USBH_Logf_Application("Webcam Task Starting Loop ...");
-    while ( true ) {
+    while ( true )
+    {
         /* Process device connection events */
         if (pdTRUE == xQueueReceive(_VIDEO_MailBox, &DevIndex, pdMS_TO_TICKS(100)))
         {

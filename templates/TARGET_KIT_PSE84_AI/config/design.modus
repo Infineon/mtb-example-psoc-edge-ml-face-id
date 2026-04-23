@@ -2473,7 +2473,7 @@
                         </Aliases>
                     </Block>
                     <Parameters>
-                        <Param id="intDivider" value="87"/>
+                        <Param id="intDivider" value="5"/>
                         <Param id="startOnReset" value="true"/>
                     </Parameters>
                 </Personality>
@@ -2645,7 +2645,7 @@
                 <Personality template="uart" version="3.0" instance="lN1M9kFebf0">
                     <Block location="scb[1]" locked="true">
                         <Aliases>
-                            <Alias value="CYBSP_TENXER_UART"/>
+                            <Alias value="CYBSP_DEBUG_UART"/>
                         </Aliases>
                     </Block>
                     <Parameters>
@@ -2699,12 +2699,12 @@
                 <Personality template="uart" version="3.0" instance="TFNlT-F3wpU">
                     <Block location="scb[2]" locked="true">
                         <Aliases>
-                            <Alias value="CYBSP_DEBUG_UART"/>
+                            <Alias value="CYBSP_TENXER_UART"/>
                         </Aliases>
                     </Block>
                     <Parameters>
                         <Param id="ApiMode" value="HIGH_LEVEL"/>
-                        <Param id="BaudRate" value="115200"/>
+                        <Param id="BaudRate" value="2000000"/>
                         <Param id="BitsOrder" value="CY_SCB_UART_LSB_FIRST"/>
                         <Param id="BreakLevel" value="0"/>
                         <Param id="BreakSignalBits" value="11"/>
@@ -3034,8 +3034,8 @@
                     <Block location="srss[0].clock[0].hfclk[8]" locked="true"/>
                     <Parameters>
                         <Param id="ClkHfCsv" value="false"/>
-                        <Param id="divider" value="8"/>
-                        <Param id="sourceClockNumber" value="0"/>
+                        <Param id="divider" value="1"/>
+                        <Param id="sourceClockNumber" value="4"/>
                     </Parameters>
                 </Personality>
                 <Personality template="hfclk_v2" version="1.0" instance="oZ8lqZyblSI">

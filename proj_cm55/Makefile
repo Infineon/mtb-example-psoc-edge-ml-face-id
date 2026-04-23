@@ -70,6 +70,9 @@ USE_BIGGER_FONT=true
 # Set to "true" to show model inferencing time instead of FPS
 SHOW_INFERENCING_TIME=true
 
+# Streaming Configuration (only applies when TARGET is APP_KIT_PSE84_AI)
+# Set to "true" to enable web streaming via UART
+ENABLE_WEB_STREAMING=true
 ################################################################################
 # MTB ML / FaceID Specific Configuration
 ################################################################################
@@ -156,18 +159,20 @@ NPU=U55
 # by default, or otherwise not found by the build system.
 SOURCES+=
 
-# Like SOURCES, but for include directories. Value should be paths to
-# directories (without a leading -I).
-INCLUDES+=
-
+ifeq (APP_KIT_PSE84_AI, $(TARGET))
+SOURCES += $(wildcard ./web_streaming/*.c)
+endif
 
 CY_ML_MIDDLEWARE_PATH=$(SEARCH_ml-middleware)
-
-
 
 # Ignore few ml-middleware files and use the patched ones present in proj_cm55
 CY_IGNORE+=${CY_ML_MIDDLEWARE_PATH}/include/mtb_ml_model.h
 CY_IGNORE+=${CY_ML_MIDDLEWARE_PATH}/source/COMPONENT_ML_TFLM/mtb_ml_model.cpp
+
+# Ignore streaming-related files when target is not APP_KIT_PSE84_AI
+ifneq (APP_KIT_PSE84_AI, $(TARGET))
+CY_IGNORE += $(wildcard ./web_streaming/*)
+endif
 
 # Add additional defines related to ARM Helium and DSP extensions
 DEFINES+=ARM_MATH_HELIUM ARM_MATH_DSP ARM_MATH_AUTOVECTORIZE CY_RETARGET_IO_CONVERT_LF_TO_CRLF _BAREMETAL=0 USE_BLOCKING_API ETHOSU55 USBH_DISABLE_STANDARD_OUTPUT
@@ -175,8 +180,12 @@ DEFINES+=ARM_MATH_HELIUM ARM_MATH_DSP ARM_MATH_AUTOVECTORIZE CY_RETARGET_IO_CONV
 # Check which kit is being used
 ifeq (APP_KIT_PSE84_AI, $(TARGET))
 DEFINES+=USE_KIT_PSE84_AI
-endif
 
+# Apply streaming configuration based on user settings
+ifeq ($(ENABLE_WEB_STREAMING),true)
+    DEFINES+=ENABLE_WEB_STREAMING
+endif
+endif
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT+=hardfp
 

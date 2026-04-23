@@ -7,33 +7,33 @@
 * Related Document : See README.md
 *
 ********************************************************************************
- * (c) 2023-2026, Infineon Technologies AG, or an affiliate of Infineon
- * Technologies AG. All rights reserved.
- * This software, associated documentation and materials ("Software") is
- * owned by Infineon Technologies AG or one of its affiliates ("Infineon")
- * and is protected by and subject to worldwide patent protection, worldwide
- * copyright laws, and international treaty provisions. Therefore, you may use
- * this Software only as provided in the license agreement accompanying the
- * software package from which you obtained this Software. If no license
- * agreement applies, then any use, reproduction, modification, translation, or
- * compilation of this Software is prohibited without the express written
- * permission of Infineon.
- *
- * Disclaimer: UNLESS OTHERWISE EXPRESSLY AGREED WITH INFINEON, THIS SOFTWARE
- * IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
- * INCLUDING, BUT NOT LIMITED TO, ALL WARRANTIES OF NON-INFRINGEMENT OF
- * THIRD-PARTY RIGHTS AND IMPLIED WARRANTIES SUCH AS WARRANTIES OF FITNESS FOR A
- * SPECIFIC USE/PURPOSE OR MERCHANTABILITY.
- * Infineon reserves the right to make changes to the Software without notice.
- * You are responsible for properly designing, programming, and testing the
- * functionality and safety of your intended application of the Software, as
- * well as complying with any legal requirements related to its use. Infineon
- * does not guarantee that the Software will be free from intrusion, data theft
- * or loss, or other breaches ("Security Breaches"), and Infineon shall have
- * no liability arising out of any Security Breaches. Unless otherwise
- * explicitly approved by Infineon, the Software may not be used in any
- * application where a failure of the Product or any consequences of the use
- * thereof can reasonably be expected to result in personal injury.
+* (c) 2025-2026, Infineon Technologies AG, or an affiliate of Infineon
+* Technologies AG. All rights reserved.
+* This software, associated documentation and materials ("Software") is
+* owned by Infineon Technologies AG or one of its affiliates ("Infineon")
+* and is protected by and subject to worldwide patent protection, worldwide
+* copyright laws, and international treaty provisions. Therefore, you may use
+* this Software only as provided in the license agreement accompanying the
+* software package from which you obtained this Software. If no license
+* agreement applies, then any use, reproduction, modification, translation, or
+* compilation of this Software is prohibited without the express written
+* permission of Infineon.
+*
+* Disclaimer: UNLESS OTHERWISE EXPRESSLY AGREED WITH INFINEON, THIS SOFTWARE
+* IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+* INCLUDING, BUT NOT LIMITED TO, ALL WARRANTIES OF NON-INFRINGEMENT OF
+* THIRD-PARTY RIGHTS AND IMPLIED WARRANTIES SUCH AS WARRANTIES OF FITNESS FOR A
+* SPECIFIC USE/PURPOSE OR MERCHANTABILITY.
+* Infineon reserves the right to make changes to the Software without notice.
+* You are responsible for properly designing, programming, and testing the
+* functionality and safety of your intended application of the Software, as
+* well as complying with any legal requirements related to its use. Infineon
+* does not guarantee that the Software will be free from intrusion, data theft
+* or loss, or other breaches ("Security Breaches"), and Infineon shall have
+* no liability arising out of any Security Breaches. Unless otherwise
+* explicitly approved by Infineon, the Software may not be used in any
+* application where a failure of the Product or any consequences of the use
+* thereof can reasonably be expected to result in personal injury.
 *******************************************************************************/
 
 /*******************************************************************************
@@ -61,6 +61,13 @@
 #include "clear_pressed_btn_img.h"
 #include "no_camera_img.h"
 #include "camera_not_supported_img.h"
+#include <inttypes.h>
+
+#ifdef ENABLE_WEB_STREAMING
+#include "chunked_stream.h"
+/* Include UART protocol for Face ID status codes */
+#include "uart_protocol.h"
+#endif
 
 #ifdef USE_BIGGER_FONT
 #include "ifx_gui_render.h"
@@ -68,7 +75,15 @@
 
 #endif /* USE_BIGGER_FONT */
 
-
+#ifdef ENABLE_WEB_STREAMING
+/*******************************************************************************
+* External Function Declaration for UART Streaming
+*******************************************************************************/
+extern void stream_push_frame(const uint16_t *rgb565);
+extern void stream_push_frame_with_faceid(const uint16_t *rgb565, uint8_t faceid_status);
+extern bool stream_send_faceid_metadata(const uart_faceid_metadata_t *metadata);
+extern bool is_streaming_active(void);  /* Check if UART streaming is active */
+#endif
 /*******************************************************************************
 * Macros
 *******************************************************************************/
@@ -241,7 +256,8 @@ touch_button_event_t touch_button_event[BUTTON_ID_MAX];
 *  void
 *
 *******************************************************************************/
-static void mirrorImage(vg_lite_buffer_t *buffer) {
+static void mirrorImage(vg_lite_buffer_t *buffer)
+{
     uint8_t temp[NUM_TEMP_ARRAY_SIZE];
     uint8_t *start, *end;
     int m, n;
@@ -249,24 +265,29 @@ static void mirrorImage(vg_lite_buffer_t *buffer) {
 
     bytes_per_pixel = BYTES_PER_PIXEL;
 
-    for (m = NUM_LOOP_START; m < CAMERA_HEIGHT ; m++) {
+    for (m = NUM_LOOP_START; m < CAMERA_HEIGHT ; m++)
+    {
 
         start = buffer->memory + m * (CAMERA_WIDTH * bytes_per_pixel);
 
         end = start + (CAMERA_WIDTH - NUM_LOOP_INCREMENT_1) * bytes_per_pixel;
 
 
-        for (n = NUM_LOOP_START; n < CAMERA_WIDTH / NUM_DISPLAY_OFFSET_2; n++) {
+        for (n = NUM_LOOP_START; n < CAMERA_WIDTH / NUM_DISPLAY_OFFSET_2; n++)
+        {
 
-            for (int i = NUM_LOOP_START; i < bytes_per_pixel; i++) {
+            for (int i = NUM_LOOP_START; i < bytes_per_pixel; i++)
+            {
                 temp[i] = start[i];
             }
 
-            for (int i = NUM_LOOP_START; i < bytes_per_pixel; i++) {
+            for (int i = NUM_LOOP_START; i < bytes_per_pixel; i++)
+            {
                 start[i] = end[i];
             }
 
-            for (int i = NUM_LOOP_START; i < bytes_per_pixel; i++) {
+            for (int i = NUM_LOOP_START; i < bytes_per_pixel; i++)
+            {
                 end[i] = temp[i];
             }
 
@@ -278,7 +299,7 @@ static void mirrorImage(vg_lite_buffer_t *buffer) {
 
 
 /*******************************************************************************
-* Function Name: mirrorImage
+* Function Name: update_database_user_count
 ********************************************************************************
 * Summary:
 *  Update the current user count from the database.
@@ -290,9 +311,11 @@ static void mirrorImage(vg_lite_buffer_t *buffer) {
 *  ifx_faceid_rslt_t Status of the operation
 *
 *******************************************************************************/
-static ifx_faceid_rslt_t update_database_user_count(void) {
+static ifx_faceid_rslt_t update_database_user_count(void)
+{
     ifx_faceid_rslt_t result = ifx_face_id_get_enrolled_user_count(&faceid_embeddings, &current_user_count);
-    if (result != IFX_FACEID_RSLT_SUCCESS) {
+    if (result != IFX_FACEID_RSLT_SUCCESS)
+    {
         printf("[LCD_TASK][ERROR] Failed to get user count: %d\n", result);
         current_user_count = RESET_VALUE_INDEX; /* Default to 0 if we can't check */
     }
@@ -332,7 +355,8 @@ static bool is_database_full(void)
 *  void
 *
 ********************************************************************************/
-static void trigger_database_full_overlay(void) {
+static void trigger_database_full_overlay(void)
+{
     database_full_overlay_flag = true;
     database_full_overlay_timestamp = ifx_time_get_ms_f();
     printf("[LCD_TASK] Database full overlay triggered - will display warning\n");
@@ -352,7 +376,8 @@ static void trigger_database_full_overlay(void) {
 *  void
 *
 ********************************************************************************/
-static bool should_show_database_full_overlay(void) {
+static bool should_show_database_full_overlay(void)
+{
     if (!database_full_overlay_flag) {
         return false;
     }
@@ -360,7 +385,8 @@ static bool should_show_database_full_overlay(void) {
     float current_time = ifx_time_get_ms_f();
     float elapsed = current_time - database_full_overlay_timestamp;
 
-    if (elapsed >= DATABASE_FULL_OVERLAY_DURATION_MS_CONST) {
+    if (elapsed >= DATABASE_FULL_OVERLAY_DURATION_MS_CONST)
+    {
         database_full_overlay_flag = false; /* Clear flag after timeout */
         return false;
     }
@@ -382,14 +408,16 @@ static bool should_show_database_full_overlay(void) {
 *  void
 *
 ********************************************************************************/
-static void display_database_status(void) {
+static void display_database_status(void)
+{
     /* Always show current user count */
     ifx_lcd_set_FGcolor(COLOR_WHITE, COLOR_WHITE, COLOR_WHITE); /* White text */
     ifx_lcd_set_BGcolor(COLOR_BLACK, COLOR_BLACK, COLOR_BLACK);       /* Black background */
     ifx_lcd_printf(((DISPLAY_W - NUM_DISPLAY_OFFSET_11) / NUM_DISPLAY_OFFSET_2 - NUM_DISPLAY_OFFSET_120), LCD_TEXT_TOP_MARGIN, "USERS: %d/%d", current_user_count, MAX_N_USER);
 
     /* Show capacity warning if close to full or full */
-    if (is_database_full()) {
+    if (is_database_full())
+    {
         ifx_lcd_set_FGcolor(COLOR_RED, COLOR_BLACK, COLOR_BLACK);     /* Red text */
         ifx_lcd_set_BGcolor(COLOR_BLACK, COLOR_BLACK, COLOR_BLACK);       /* Black background */
         ifx_lcd_printf(((DISPLAY_W - NUM_DISPLAY_OFFSET_15) / NUM_DISPLAY_OFFSET_2), LCD_TEXT_TOP_MARGIN, "DATABASE FULL!");
@@ -401,7 +429,9 @@ static void display_database_status(void) {
             touch_button_event[FACE_ENROL_BUTTON_ID].pressed = false;
         }
 
-    } else if (current_user_count >= MAX_N_USER - NUM_LOOP_INCREMENT_1) {
+    }
+    else if (current_user_count >= MAX_N_USER - NUM_LOOP_INCREMENT_1)
+    {
         ifx_lcd_set_FGcolor(COLOR_YELLOW, COLOR_YELLOW, COLOR_BLACK);   /* Yellow text */
         ifx_lcd_set_BGcolor(COLOR_BLACK, COLOR_BLACK, COLOR_BLACK);       /* Black background */
         ifx_lcd_printf(((DISPLAY_W - NUM_DISPLAY_OFFSET_15) / NUM_DISPLAY_OFFSET_2), LCD_TEXT_TOP_MARGIN, "ALMOST FULL");
@@ -422,7 +452,8 @@ static void display_database_status(void) {
 *  void
 *
 *******************************************************************************/
-static void display_database_full_overlay(void) {
+static void display_database_full_overlay(void)
+{
     /* Display prominent warning message */
     ifx_lcd_set_FGcolor(COLOR_WHITE, COLOR_WHITE, COLOR_WHITE); /* White text */
     ifx_lcd_set_BGcolor(COLOR_RED, COLOR_BLACK, COLOR_BLACK);     /* Red background for urgency */
@@ -481,7 +512,7 @@ static cy_en_rram_status_t ifx_copy_embeddings_to_nvm(uint32_t nvm_addr,
         if (CY_RRAM_AHB_NO_ERROR != ahb_error)
         {
             printf("[ERROR] AHB bus error while accessing NVM database 0x%08x\r\n", ahb_error);
-            printf("[INFO] NVM status 0x%08lx\r\n", Cy_RRAM_GetStatus(RRAMC0));
+            printf("[INFO] NVM status 0x%08" PRIx32 "\r\n", Cy_RRAM_GetStatus(RRAMC0));
 
             status = CY_RRAM_WRITE_OPERATION_ERROR;
         }
@@ -508,11 +539,13 @@ static cy_en_rram_status_t ifx_copy_embeddings_to_nvm(uint32_t nvm_addr,
 *  void
 *
 ********************************************************************************/
-static void plot_aligned_faces_bottom() {
+static void plot_aligned_faces_bottom()
+{
     ifx_faceid_rslt_t result;
 
     result = ifx_face_id_get_aligned_faces(&aligned_faces);
-    if (result != IFX_FACEID_RSLT_SUCCESS || aligned_faces.num_aligned_faces == RESET_VALUE_INDEX) {
+    if (result != IFX_FACEID_RSLT_SUCCESS || aligned_faces.num_aligned_faces == RESET_VALUE_INDEX)
+    {
         return;
     }
 
@@ -711,11 +744,13 @@ inline static void cleanup(void)
 *  void
 *
 ********************************************************************************/
-static void init_buffer_system(void) {
+static void init_buffer_system(void)
+{
     printf("[LCD_TASK] Initializing buffer system\n");
 
     /* Ensure clean startup state */
-    for (int i = NUM_LOOP_START; i < NUM_IMAGE_BUFFERS; i++) {
+    for (int i = NUM_LOOP_START; i < NUM_IMAGE_BUFFERS; i++)
+    {
         _ImageBuff[i].BufReady = RESET_VALUE_INDEX;
         _ImageBuff[i].NumBytes = RESET_VALUE_INDEX;
     }
@@ -789,13 +824,17 @@ static void draw_filled_rect_to_framebuffer(uint16_t *framebuffer, int width, in
 *  bool: True if all poses are completed, false otherwise
 *
 ********************************************************************************/
-static bool is_enrollment_complete(ifx_on_dev_enroll_stats_t *progress) {
-    if (progress == NULL) {
+static bool is_enrollment_complete(ifx_on_dev_enroll_stats_t *progress)
+{
+    if (progress == NULL)
+    {
         return false;
     }
 
-    for (int i = NUM_LOOP_START; i < progress->num_poses; i++) {
-        if (progress->enroll_progress[i] != PROGRESS_COMPLETED) {
+    for (int i = NUM_LOOP_START; i < progress->num_poses; i++)
+    {
+        if (progress->enroll_progress[i] != PROGRESS_COMPLETED)
+        {
             return false;
         }
     }
@@ -803,7 +842,6 @@ static bool is_enrollment_complete(ifx_on_dev_enroll_stats_t *progress) {
     printf("[LCD_TASK] All %d poses completed - auto-completing enrolment\n", progress->num_poses);
     return true;
 }
-
 
 /********************************************************************************
 * Function Name: draw_enrollment_progress_grid
@@ -828,7 +866,8 @@ static bool is_enrollment_complete(ifx_on_dev_enroll_stats_t *progress) {
 *  void
 *
 ********************************************************************************/
-static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, int current_pose, ifx_faceid_prediction_t *prediction, ifx_enrollment_config_t *config) {
+static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, int current_pose, ifx_faceid_prediction_t *prediction, ifx_enrollment_config_t *config)
+{
     const int grid_size = GRID_SIZE;         /* Size of each grid cell */
     const int grid_spacing = GRID_SPACING;      /* Spacing between cells */
     const int text_offset_y = TEXT_OFFSET_Y;     /* Offset for better text centering vertically */
@@ -838,7 +877,8 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
     int grid_rows, grid_cols;
     int pose_positions[MAX_NUM_POSES][2]; /* [pose_idx][row, col] - enough space for any layout */
 
-    if (config->num_poses == NUM_DISPLAY_OFFSET_3) {
+    if (config->num_poses == NUM_DISPLAY_OFFSET_3)
+    {
         grid_rows = NUM_GRID_ROWS_1;
         grid_cols = NUM_GRID_COLS_3;
         /* Linear layout: Left, Front, Right */
@@ -846,7 +886,8 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
         pose_positions[NUM_LOOP_INCREMENT_1][NUM_LOOP_START] = RESET_VALUE_INDEX; pose_positions[NUM_LOOP_INCREMENT_1][NUM_LOOP_INCREMENT_1] = NUM_LOOP_INCREMENT_1;  /* Front */
         pose_positions[NUM_DISPLAY_OFFSET_2][NUM_LOOP_START] = RESET_VALUE_INDEX; pose_positions[NUM_DISPLAY_OFFSET_2][NUM_LOOP_INCREMENT_1] = NUM_DISPLAY_OFFSET_2;  /* Right */
     }
-    else if (config->num_poses == 5) {
+    else if (config->num_poses == 5)
+    {
         grid_rows = 3;
         grid_cols = 3;
         /* Cross layout: Up, Down, Left, Right, Front (center) */
@@ -856,11 +897,13 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
         pose_positions[3][0] = 1; pose_positions[3][1] = 2;  /* Right (middle right) */
         pose_positions[4][0] = 1; pose_positions[4][1] = 1;  /* Front (center) */
     }
-    else { /* config->num_poses == 9 */
+    else
+    { /* config->num_poses == 9 */
         grid_rows = 3;
         grid_cols = 3;
         /* Full 3x3 grid */
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < 9; i++)
+        {
             pose_positions[i][0] = i / 3;  /* row */
             pose_positions[i][1] = i % 3;  /* col */
         }
@@ -887,20 +930,26 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
             color_dark_gray);
 
     /* For 5-pose layout, first fill empty positions with dark gray */
-    if (config->num_poses == 5) {
-        for (int row = 0; row < grid_rows; row++) {
-            for (int col = 0; col < grid_cols; col++) {
+    if (config->num_poses == 5)
+    {
+        for (int row = 0; row < grid_rows; row++)
+        {
+            for (int col = 0; col < grid_cols; col++)
+            {
                 /* Check if this position is used by any pose */
                 bool position_used = false;
-                for (int pose_idx = 0; pose_idx < config->num_poses; pose_idx++) {
-                    if (pose_positions[pose_idx][0] == row && pose_positions[pose_idx][1] == col) {
+                for (int pose_idx = 0; pose_idx < config->num_poses; pose_idx++)
+                {
+                    if (pose_positions[pose_idx][0] == row && pose_positions[pose_idx][1] == col)
+                    {
                         position_used = true;
                         break;
                     }
                 }
 
                 /* Fill unused positions with darker background */
-                if (!position_used) {
+                if (!position_used)
+                {
                     int x = grid_x + col * (grid_size + grid_spacing);
                     int y = grid_y + row * (grid_size + grid_spacing);
                     draw_filled_rect_to_framebuffer(LCD_Addr, DISPLAY_W, DISPLAY_H,
@@ -911,7 +960,8 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
     }
 
     /* Draw grid showing progress for each pose */
-    for (int pose_idx = 0; pose_idx < config->num_poses; pose_idx++) {
+    for (int pose_idx = 0; pose_idx < config->num_poses; pose_idx++)
+    {
         int row = pose_positions[pose_idx][0];
         int col = pose_positions[pose_idx][1];
 
@@ -922,7 +972,8 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
         int border_thickness = 3;             /* Default border thickness */
 
         /* Set color based on progress state */
-        switch (progress->enroll_progress[pose_idx]) {
+        switch (progress->enroll_progress[pose_idx])
+        {
         case PROGRESS_NOT_STARTED:
             color = color_not_started;
             break;
@@ -938,7 +989,8 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
         }
 
         /* Check if this is the current pose - highlight with red border and make it thicker */
-        if (current_pose == pose_idx) {
+        if (current_pose == pose_idx)
+        {
             border_color = color_red;
             border_thickness = 5;  /* Thicker border for current pose */
         }
@@ -982,7 +1034,9 @@ static void draw_enrollment_progress_grid(ifx_on_dev_enroll_stats_t *progress, i
 
             /* Draw second line */
             ifx_lcd_printf(x + text_offset_x, y + text_offset_y + 8, line2);
-        } else {
+        }
+        else
+        {
             /* Single line for simple names */
             sprintf(label, "%s", pose_name);
             ifx_lcd_set_FGcolor(0, 0, 0);  /* Black text */
@@ -1062,20 +1116,24 @@ static void update_enrollment_display(ifx_faceid_prediction_t *prediction,
         enrollment_state_t state,
         enrollment_type_t type,
         ifx_on_dev_enroll_stats_t *progress,
-        ifx_faceid_rslt_t enrollment_feedback) {
-    if (type != ENROLLMENT_TYPE_ON_DEVICE) {
+        ifx_faceid_rslt_t enrollment_feedback)
+        {
+    if (type != ENROLLMENT_TYPE_ON_DEVICE)
+    {
         return; /* Only show special display for on-device enrolment */
     }
 
     /* No need to get enrolment progress here since it's passed in */
-    if (progress == NULL) {
+    if (progress == NULL)
+    {
         printf("[LCD_TASK][ERROR] No enrolment progress data available\n");
         return; /* Can't display without progress data */
     }
 
     /* Calculate current pose index for highlighting */
     int current_pose = -1;  /* Default to no pose detected */
-    if (prediction->count == 1) {
+    if (prediction->count == 1)
+    {
         /* Use the same pose detection logic as in the enrolment system */
         /* If pose is out of range, the API will return -1 */
         current_pose = ifx_face_id_get_pose_bin_index(enrollment_config, prediction->yaw[0], prediction->pitch[0], prediction->roll[0]);
@@ -1088,39 +1146,53 @@ static void update_enrollment_display(ifx_faceid_prediction_t *prediction,
     ifx_lcd_set_FGcolor(COLOR_WHITE, COLOR_WHITE, COLOR_WHITE); /* White text */
     ifx_lcd_set_BGcolor(0, 0, 128);     /* Dark blue background */
 
-    if (state == ENROLLMENT_STATE_WAITING_FOR_REFERENCE) {
+    if (state == ENROLLMENT_STATE_WAITING_FOR_REFERENCE)
+    {
         ifx_lcd_printf(ALIGN_LEFT, 40, "WAITING FOR REFERENCE FACE");
 
         /* Show guidance for getting a good reference face */
-        if (prediction->count == 1) {
+        if (prediction->count == 1)
+        {
             float conf_pct = prediction->conf[0] * 100.0f;
 
-            if (conf_pct >= 90.0f && prediction->frontal_face[0]) {
+            if (conf_pct >= 90.0f && prediction->frontal_face[0])
+            {
                 ifx_lcd_set_FGcolor(0, 255, 0);  /* Green text */
                 ifx_lcd_printf(ALIGN_LEFT, 70, "GOOD FACE DETECTED! HOLD STEADY");
-            } else {
+            }
+            else
+            {
                 ifx_lcd_set_FGcolor(255, 0, 0);  /* Red text */
                 ifx_lcd_printf(ALIGN_LEFT, 70, "LOOK DIRECTLY AT CAMERA (%.1f%%)", conf_pct);
             }
-        } else if (prediction->count > 1) {
+        }
+        else if (prediction->count > 1)
+        {
             ifx_lcd_set_FGcolor(255, 0, 0);  /* Red text */
             ifx_lcd_printf(ALIGN_LEFT, 70, "TOO MANY FACES (%d). NEED JUST ONE.", prediction->count);
-        } else {
+        }
+        else
+        {
             ifx_lcd_set_FGcolor(255, 0, 0);  /* Red text */
             ifx_lcd_printf(ALIGN_LEFT, 70, "NO FACE DETECTED");
         }
 
     }
-    else if (state == ENROLLMENT_STATE_COLLECTING) {
+    else if (state == ENROLLMENT_STATE_COLLECTING)
+    {
         ifx_lcd_printf(ALIGN_LEFT, 40, "COLLECTING POSES");
 
         /* Count completed and in-progress poses */
         int complete = 0;
         int in_progress = 0;
-        for (int i = NUM_LOOP_START; i < progress->num_poses; i++) {
-            if (progress->enroll_progress[i] == PROGRESS_COMPLETED) {
+        for (int i = NUM_LOOP_START; i < progress->num_poses; i++)
+        {
+            if (progress->enroll_progress[i] == PROGRESS_COMPLETED)
+            {
                 complete++;
-            } else if (progress->enroll_progress[i] == PROGRESS_IN_PROGRESS) {
+            }
+            else if (progress->enroll_progress[i] == PROGRESS_IN_PROGRESS)
+            {
                 in_progress++;
             }
         }
@@ -1130,29 +1202,42 @@ static void update_enrollment_display(ifx_faceid_prediction_t *prediction,
         ifx_lcd_printf(ALIGN_LEFT, 70, "PROGRESS: %d COMPLETE, %d IN PROGRESS", complete, in_progress);
 
         /* Show specific feedback based on enrolment result */
-        if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_REF_LOW_CONF) {
+        if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_REF_LOW_CONF)
+        {
             /* Show specific message for low pose reference confidence */
             ifx_lcd_set_FGcolor(255, 165, 0);  /* Orange text */
             ifx_lcd_printf(ALIGN_LEFT, 100, "HOLD CURRENT POSE STEADY - QUALITY TOO LOW");
-        } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_OUT_OF_RANGE) {
+        }
+        else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_OUT_OF_RANGE)
+        {
             ifx_lcd_set_FGcolor(255, 0, 0);  /* Red text */
             ifx_lcd_printf(ALIGN_LEFT, 100, "ADJUST HEAD POSE TO SUPPORTED RANGE");
-        } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_FACE_AT_BOUNDARY) {
+        }
+        else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_FACE_AT_BOUNDARY)
+        {
             ifx_lcd_set_FGcolor(255, 0, 0);  /* Red text */
             ifx_lcd_printf(ALIGN_LEFT, 100, "MOVE AWAY FROM IMAGE EDGES");
-        } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_MULTI_FACE) {
+        }
+        else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_MULTI_FACE)
+        {
             /* Handle multiple faces detected */
             ifx_lcd_set_FGcolor(255, 0, 0);  /* Red text */
             ifx_lcd_printf(ALIGN_LEFT, 100, "TOO MANY FACES - ONLY ONE PERSON ALLOWED");
-        } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_MAIN_REF) {
+        }
+        else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_MAIN_REF)
+        {
             /* Handle low similarity (different person) */
             ifx_lcd_set_FGcolor(128, 0, 128);  /* Purple text */
             ifx_lcd_printf(ALIGN_LEFT, 100, "FACE TOO DIFFERENT TO MAIN REFERENCE");
-        } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_POSE_REF) {
+        }
+        else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_POSE_REF)
+        {
             /* Handle low similarity (different person) */
             ifx_lcd_set_FGcolor(128, 0, 128);  /* Purple text */
             ifx_lcd_printf(ALIGN_LEFT, 100, "FACE TOO DIFFERENT TO POSE REFERENCE");
-        } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_COMPLETE) {
+        }
+        else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_COMPLETE)
+        {
             /* Handle pose completion */
             ifx_lcd_set_FGcolor(0, 255, 0);  /* Bright green text */
             if (current_pose >= 0 && current_pose < progress->num_poses) {
@@ -1160,7 +1245,9 @@ static void update_enrollment_display(ifx_faceid_prediction_t *prediction,
             } else {
                 ifx_lcd_printf(ALIGN_LEFT, 100, "EXCELLENT! POSE COMPLETED");
             }
-        } else {
+        }
+        else
+        {
             /* Default instruction */
             ifx_lcd_set_FGcolor(255, 255, 0);  /* Yellow text */
             ifx_lcd_printf(ALIGN_LEFT, 100, "MOVE HEAD SLOWLY IN DIFFERENT POSES");
@@ -1168,12 +1255,15 @@ static void update_enrollment_display(ifx_faceid_prediction_t *prediction,
 
         /* AUTO-COMPLETION LOGIC */
         /* Check if we're ready for auto-completion or show manual completion option */
-        if (complete == progress->num_poses) {
+        if (complete == progress->num_poses)
+        {
             /* All poses completed - show auto-completion message */
             ifx_lcd_set_FGcolor(0, 255, 0);  /* Bright green text */
             ifx_lcd_set_BGcolor(0, 128, 0);  /* Dark green background */
             ifx_lcd_printf(ALIGN_LEFT, 130, "ALL POSES COMPLETE - AUTO-SAVING...");
-        } else {
+        }
+        else
+        {
             /* Still collecting poses - show manual completion option */
 
             ifx_lcd_set_FGcolor(255, 255, 255);  /* White text */
@@ -1181,7 +1271,8 @@ static void update_enrollment_display(ifx_faceid_prediction_t *prediction,
             ifx_lcd_printf(ALIGN_LEFT, 130, "TOUCH BUTTON TO FINISH EARLY OR WAIT FOR AUTO-COMPLETE");
         }
     }
-    else if (state == ENROLLMENT_STATE_COMPLETING) {
+    else if (state == ENROLLMENT_STATE_COMPLETING)
+    {
         ifx_lcd_set_FGcolor(255, 255, 255);  /* White text */
         ifx_lcd_set_BGcolor(0, 0, 128);      /* Dark blue background */
         ifx_lcd_printf(ALIGN_LEFT, 40, "PROCESSING ENROLLMENT...");
@@ -1272,7 +1363,8 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
     /* Clear renderTarget buffer */
     float time_draw_start = get_time_in_ms();
     vg_lite_error_t error = vg_lite_clear(renderTarget, NULL, BLACK_COLOR);
-    if (error) {
+    if (error)
+    {
         printf("\r\n[LCD_TASK][ERROR] vg_lite_clear() returned error %d\r\n", error);
         cleanup();
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
@@ -1285,7 +1377,8 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
             VG_LITE_BLEND_NONE,
             0,
             VG_LITE_FILTER_POINT);
-    if (error) {
+    if (error)
+    {
         printf("\r\n[LCD_TASK][ERROR] vg_lite_blit() (320x240 BGR565 ==> display BGR565) returned error %d\r\n", error);
         cleanup();
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
@@ -1334,32 +1427,44 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
                     ifx_set_fg_color((255 << 16) | (255 << 8));  /* Yellow text */
                     ifx_set_bg_color(255 << 16); /* Red background*/
                     ifx_print_to_buffer(xtext, ytext - 20, "ADJUST HEAD POSE");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_FACE_AT_BOUNDARY) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_FACE_AT_BOUNDARY)
+                {
                     /* Show face at boundary message */
                     ifx_set_fg_color((255 << 16) | (255 << 8));  /* Yellow text */
                     ifx_set_bg_color(255 << 16);    /* Red background */
                     ifx_print_to_buffer(xtext, ytext - 20, "MOVE AWAY FROM EDGE");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_REF_LOW_CONF) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_REF_LOW_CONF)
+                {
                     /* Show pose reference confidence too low message */
                     ifx_set_fg_color((255 << 16) | (255 << 8));  /* Yellow text */
                     ifx_set_bg_color((255 << 16) | (165 << 8));  /* Orange background */
                     ifx_print_to_buffer(xtext, ytext - 20, "IMPROVE POSE QUALITY");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_MULTI_FACE) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_MULTI_FACE)
+                {
                     /* Show multiple faces detected message */
                     ifx_set_fg_color((255 << 16) | (255 << 8) | (255));   /* White text */
                     ifx_set_bg_color(255 << 16);    /* Red background */
                     ifx_print_to_buffer(xtext, ytext - 20, "TOO MANY FACES");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_COMPLETE) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_COMPLETE)
+                {
                     /* Show pose completed message */
                     ifx_set_fg_color(0);         /* Black text */
                     ifx_set_bg_color(255 << 8);  /* Bright green background */
                     ifx_print_to_buffer(xtext, ytext - 20, "POSE COMPLETE!");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_MAIN_REF || enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_POSE_REF) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_MAIN_REF || enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_POSE_REF)
+                {
                     /* Show low similarity message */
                     ifx_set_fg_color((255 << 16) | (255 << 8) | (255));   /* White text */
                     ifx_set_bg_color(128 << 16 | 128); /* Purple background */
                     ifx_print_to_buffer(xtext, ytext - 20, "DIFFERENT PERSON?");
-                } else {
+                }
+                else
+                {
                     /* Normal enrolment message */
                     ifx_set_fg_color((255 << 16) | (255 << 8) | (255));   /* White text */
                     ifx_set_bg_color(128 << 8);      /* Dark green background */
@@ -1374,32 +1479,44 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
                     ifx_lcd_set_FGcolor(255, 255, 0);  /* Yellow text */
                     ifx_lcd_set_BGcolor(255, 0, 0);    /* Red background */
                     ifx_lcd_printfToBuffer(xtext, ytext, "ADJUST HEAD POSE");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_FACE_AT_BOUNDARY) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_FACE_AT_BOUNDARY)
+                {
                     /* Show face at boundary message  */
                     ifx_lcd_set_FGcolor(255, 255, 0);  /* Yellow text */
                     ifx_lcd_set_BGcolor(255, 0, 0);    /* Red background */
                     ifx_lcd_printfToBuffer(xtext, ytext, "MOVE AWAY FROM EDGE");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_REF_LOW_CONF) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_REF_LOW_CONF)
+                {
                     /* Show pose reference confidence too low message */
                     ifx_lcd_set_FGcolor(255, 255, 0);  /* Yellow text */
                     ifx_lcd_set_BGcolor(255, 165, 0);  /* Orange background */
                     ifx_lcd_printfToBuffer(xtext, ytext, "IMPROVE POSE QUALITY");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_MULTI_FACE) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_MULTI_FACE)
+                {
                     /* Show multiple faces detected message */
                     ifx_lcd_set_FGcolor(255, 255, 255);  /* White text */
                     ifx_lcd_set_BGcolor(255, 0, 0);      /* Red background */
                     ifx_lcd_printfToBuffer(xtext, ytext, "TOO MANY FACES");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_COMPLETE) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_POSE_COMPLETE)
+                {
                     /* Show pose completed message */
                     ifx_lcd_set_FGcolor(0, 0, 0);        /* Black text */
                     ifx_lcd_set_BGcolor(0, 255, 0);      /* Bright green background */
                     ifx_lcd_printfToBuffer(xtext, ytext, "POSE COMPLETE!");
-                } else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_MAIN_REF || enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_POSE_REF) {
+                }
+                else if (enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_MAIN_REF || enrollment_feedback == IFX_FACEID_RSLT_ENROLL_LOW_SIM_POSE_REF)
+                {
                     /* Show low similarity message */
                     ifx_lcd_set_FGcolor(255, 255, 255);  /* White text */
                     ifx_lcd_set_BGcolor(128, 0, 128);    /* Purple background */
                     ifx_lcd_printfToBuffer(xtext, ytext, "DIFFERENT PERSON?");
-                } else {
+                }
+                else
+                {
                     /* Normal enrolment message */
                     ifx_lcd_set_FGcolor(255, 255, 255);  /* White text */
                     ifx_lcd_set_BGcolor(0, 128, 0);      /* Dark green background */
@@ -1440,10 +1557,13 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
 #ifdef DRAW_FACIAL_LANDMARKS
             int16_t plot_landmarks[10];
             for (int l=0; l<10; l++){ /* xxxxxyyyyy */
-                if (l < 5){
+                if (l < 5)
+                {
                     /* x */
                     plot_landmarks[l] = (int16_t)(prediction->landmarks[l] * scale_Cam2Disp) + display_offset_x;
-                } else {
+                }
+                else
+                {
                     /* y */
                     plot_landmarks[l] = (int16_t)(prediction->landmarks[l] * scale_Cam2Disp) + display_offset_y;
                 }
@@ -1522,20 +1642,25 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
     /* Display mode indicator - moved down to avoid overlap with database status */
     ifx_lcd_set_FGcolor(255, 255, 0); /* Yellow text */
     ifx_lcd_set_BGcolor(0, 0, 255);   /* Blue background */
-    if (current_display_mode == DISPLAY_MODE_INFERENCE) {
+    if (current_display_mode == DISPLAY_MODE_INFERENCE)
+    {
         ifx_lcd_printf(ALIGN_LEFT, 10, "INFERENCE MODE");
-    } else {
+    }
+    else
+    {
 #ifndef DISABLE_ONDEV_ENROLL
         ifx_lcd_printf(ALIGN_LEFT, 10, "ENROLMENT MODE");
 
         /* If in enrolment mode, show additional enrolment information */
-        if (enrollment_type == ENROLLMENT_TYPE_ON_DEVICE) {
+        if (enrollment_type == ENROLLMENT_TYPE_ON_DEVICE)
+        {
             /* Get current enrolment progress for display */
             ifx_on_dev_enroll_stats_t enrollment_progress;
             /* we just want status, early return so we can pass in some NULLs */
             ifx_faceid_rslt_t prog_result = ifx_on_device_enrollment(NULL, NULL, ENROLL_MODE_STATUS, &enrollment_progress, enrollment_config);
 
-            if (prog_result == IFX_FACEID_RSLT_SUCCESS) {
+            if (prog_result == IFX_FACEID_RSLT_SUCCESS)
+            {
                 update_enrollment_display(prediction, enrollment_config, enrollment_state, enrollment_type, &enrollment_progress, enrollment_feedback);
             }
         }
@@ -1553,13 +1678,15 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
 #endif /* SHOW_INFERENCING_TIME */
 
 #ifdef PLOT_ALIGNED_FACES
-    if (prediction->count > 0) {
+    if (prediction->count > 0)
+    {
         plot_aligned_faces_bottom();
     }
 #endif /*PLOT_ALIGNED_FACES */
 
     /* Show database full overlay if needed (temporary 5-second warning) */
-    if (should_show_database_full_overlay()) {
+    if (should_show_database_full_overlay())
+    {
         display_database_full_overlay();
     }
 
@@ -1598,7 +1725,8 @@ uint8_t * getInputImage()
     uint8_t bufReady = 0;
 
     /* **KEY CHANGE**: Validate buffer index first */
-    if (workBuffer >= NUM_IMAGE_BUFFERS) {
+    if (workBuffer >= NUM_IMAGE_BUFFERS)
+    {
         printf("[LCD_TASK] Invalid lastBuffer %d, using buffer 0\n", workBuffer);
         workBuffer = 0;
     }
@@ -1607,7 +1735,8 @@ uint8_t * getInputImage()
     __DMB();
 
     /* **KEY CHANGE**: If primary buffer not ready, try the other buffer */
-    if (bufReady == 0) {
+    if (bufReady == 0)
+    {
         uint8_t altBuffer = (workBuffer + 1) % NUM_IMAGE_BUFFERS;
         __DMB();
         if (_ImageBuff[altBuffer].BufReady == 1) {
@@ -1619,15 +1748,19 @@ uint8_t * getInputImage()
     }
 
     /* Simple timeout without aggressive recovery */
-    if (bufReady == 0) {
-        if (last_successful_frame_time == 0) {
+    if (bufReady == 0)
+    {
+        if (last_successful_frame_time == 0)
+        {
             last_successful_frame_time = current_time;
         }
 
         float time_since_last_frame = current_time - last_successful_frame_time;
 
-        if (time_since_last_frame > watchdog_timeout) {
-            if (recovery_attempts == 0) {
+        if (time_since_last_frame > watchdog_timeout)
+        {
+            if (recovery_attempts == 0)
+            {
                 printf("[LCD_TASK][TIMEOUT] No frames for %.1f seconds\n", time_since_last_frame / 1000.0f);
                 recovery_attempts = 1;
             }
@@ -1636,7 +1769,8 @@ uint8_t * getInputImage()
     }
 
     /* Success path - frame available */
-    if (recovery_attempts > 0) {
+    if (recovery_attempts > 0)
+    {
         printf("[LCD_TASK][RECOVERY] Frame received after timeout\n");
         recovery_attempts = 0;
     }
@@ -1644,7 +1778,8 @@ uint8_t * getInputImage()
 
     /* Validate buffer data before processing */
     __DMB();
-    if (_ImageBuff[workBuffer].NumBytes != CAMERA_BUFFER_SIZE) {
+    if (_ImageBuff[workBuffer].NumBytes != CAMERA_BUFFER_SIZE)
+    {
         /* Clear the bad buffer */
         _ImageBuff[workBuffer].NumBytes = 0;
         __DMB();
@@ -1672,13 +1807,14 @@ uint8_t * getInputImage()
     vg_lite_flush();
     vg_lite_finish();
 
+#ifndef ENABLE_WEB_STREAMING
     /* **KEY CHANGE**: Clear buffer status AFTER successful processing */
     /* Use more robust atomic clearing */
     _ImageBuff[workBuffer].NumBytes = 0;
     __DMB();
     _ImageBuff[workBuffer].BufReady = 0;
     __DMB();
-
+#endif
 
     if (!point3mp_camera_enabled){
         mirrorImage(&bgr565);
@@ -1690,6 +1826,25 @@ uint8_t * getInputImage()
             Image_buf_bgr888, IMAGE_WIDTH, IMAGE_HEIGHT);
 
     float time_draw_end = get_time_in_ms();
+
+#ifdef ENABLE_WEB_STREAMING
+    /* CHUNKED STREAMING: Quick push of frame (JPEG encodes immediately, no race)
+     * Only JPEG encoding happens here (~30ms), then UART task sends chunks
+     * No race condition because we compress entire frame before returning */
+    extern bool chunked_stream_is_active(void);
+    extern bool chunked_stream_push_frame(const uint16_t *rgb565);
+    if (chunked_stream_is_active())
+    {
+        chunked_stream_push_frame((uint16_t*)bgr565.memory);
+    }
+
+    /* Clear buffer status AFTER frame captured for streaming */
+    /* This signals camera that it can write the next frame */
+    _ImageBuff[workBuffer].NumBytes = 0;
+    __DMB();
+    _ImageBuff[workBuffer].BufReady = 0;
+    __DMB();
+#endif
 
     /* Performance measurements */
     Time_getInputImage      = time_draw_end - time_draw_start;
@@ -1823,7 +1978,8 @@ void cm55_ns_gfx_task(void *arg)
 
     /* Initializes the graphics subsystem according to the configuration */
     status = Cy_GFXSS_Init(base, &GFXSS_config, &gfx_context);
-    if (CY_GFX_SUCCESS != status) {
+    if (CY_GFX_SUCCESS != status)
+    {
         printf("[LCD_TASK][ERROR] Graphics subsystem initialization failed: Cy_GFXSS_Init() returned error %d\r\n", status);
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
     }
@@ -1859,9 +2015,10 @@ void cm55_ns_gfx_task(void *arg)
     if (CY_SCB_I2C_SUCCESS != i2c_result)
     {
         printf("I2C controller initialization failed !!\r\n");
+#ifndef ENABLE_WEB_STREAMING
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
+#endif
     }
-
     /* Initialize the I2C interrupt */
     sysint_status = Cy_SysInt_Init(&i2c_controller_irq_cfg,
             &i2c_controller_interrupt);
@@ -1869,9 +2026,10 @@ void cm55_ns_gfx_task(void *arg)
     if (CY_SYSINT_SUCCESS != sysint_status)
     {
         printf("I2C controller interrupt initialization failed\r\n");
+#ifndef ENABLE_WEB_STREAMING
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
+#endif
     }
-
     /* Enable the I2C interrupts. */
     NVIC_EnableIRQ(i2c_controller_irq_cfg.intrSrc);
 
@@ -1887,7 +2045,9 @@ void cm55_ns_gfx_task(void *arg)
     if (CY_SCB_I2C_SUCCESS != i2c_result)
     {
         printf("Waveshare 4.3-Inch display init failed with status = %u\r\n", (unsigned int) i2c_result);
+#ifndef ENABLE_WEB_STREAMING
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
+#endif
     }
 
     /* Set the display size for LCD utils */
@@ -1905,12 +2065,14 @@ void cm55_ns_gfx_task(void *arg)
     /* Initialize the draw */
 
     vglite_status = vg_lite_init(256, 256);
-    if (VG_LITE_SUCCESS != vglite_status) {
+    if (VG_LITE_SUCCESS != vglite_status)
+    {
         VG_LITE_ERROR_EXIT("vg_lite engine init failed: vg_lite_init() returned error %d\r\n", vglite_status);
     }
 
     /* setup double display-frame-buffers */
-    for (int ii = 0; ii < 2; ii++) {
+    for (int ii = 0; ii < 2; ii++)
+    {
         display_buffer[ii].width  = DISPLAY_W;
         display_buffer[ii].height = DISPLAY_H;
         display_buffer[ii].format = VG_LITE_BGR565;
@@ -1922,13 +2084,15 @@ void cm55_ns_gfx_task(void *arg)
     renderTarget = &display_buffer[0];
 
     /* Allocate the camera buffers */
-    for (int i = 0; i < NUM_IMAGE_BUFFERS; i++) {
+    for (int i = 0; i < NUM_IMAGE_BUFFERS; i++)
+    {
         usb_yuv_frames[i].width  = CAMERA_WIDTH;
         usb_yuv_frames[i].height = CAMERA_HEIGHT;
         usb_yuv_frames[i].format = VG_LITE_YUYV;
         usb_yuv_frames[i].image_mode = VG_LITE_NORMAL_IMAGE_MODE;
         vglite_status = vg_lite_allocate(&usb_yuv_frames[i]);
-        if (VG_LITE_SUCCESS != vglite_status) {
+        if (VG_LITE_SUCCESS != vglite_status)
+        {
             VG_LITE_ERROR_EXIT("camera buffers allocation failed in vglite space: vg_lite_allocate() returned error %d\r\n", vglite_status);
         }
     }
@@ -1945,7 +2109,8 @@ void cm55_ns_gfx_task(void *arg)
 
     /* Clear the buffer with Black */
     vglite_status = vg_lite_clear(renderTarget, NULL, BLACK_COLOR);
-    if (VG_LITE_SUCCESS != vglite_status) {
+    if (VG_LITE_SUCCESS != vglite_status)
+    {
         VG_LITE_ERROR_EXIT("Clear failed: vg_lite_clear() returned error %d\r\n", vglite_status);
     }
 
@@ -1999,7 +2164,8 @@ void cm55_ns_gfx_task(void *arg)
     ifx_enrollment_config_t enrollment_config = {0};
     /* Get current defaults first */
     ifx_result = ifx_face_id_get_enrollment_config(&enrollment_config);
-    if (ifx_result != IFX_FACEID_RSLT_SUCCESS) {
+    if (ifx_result != IFX_FACEID_RSLT_SUCCESS)
+    {
         printf("[LCD_TASK][ERROR] Failed to get enrolment config: %d\n", ifx_result);
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
     }
@@ -2011,7 +2177,8 @@ void cm55_ns_gfx_task(void *arg)
     ifx_inference_config_t inference_config = {0};
     /* Get current defaults first */
     ifx_result = ifx_face_id_get_inference_config(&inference_config);
-    if (ifx_result == IFX_FACEID_RSLT_SUCCESS) {
+    if (ifx_result == IFX_FACEID_RSLT_SUCCESS)
+    {
         if(Logitech_camera_enabled == 0){
             /* if we are using the WPP webcam (0.3 MP instead of the C920e 5 MP), we need to handle more noise and blur etc */
             /* lets tune some thresholds here to make our life a bit easier when using it */
@@ -2020,7 +2187,9 @@ void cm55_ns_gfx_task(void *arg)
             inference_config.thresh_det_conf = 0.275;   /* was previously 0.375 by default. Increase if you notice non-face detected boxes */
             inference_config.default_face_id_sim_th = 0.5; /* was previously 0.5, need it to be stricter */
         }
-    } else {
+    }
+    else
+    {
         printf("[LCD_TASK][ERROR] Failed to get inference config: %d\n", ifx_result);
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
     }
@@ -2039,29 +2208,43 @@ void cm55_ns_gfx_task(void *arg)
     desired_display_w = DISPLAY_W;
 
     bool display_error = true;
-    if (GFXSS_dc_config.display_width != desired_display_w) {
-        printf("\n[LCD_ERROR] GFXSS_dc_config.display_width = %ld\n", GFXSS_dc_config.display_width);
-    } else if (GFXSS_dc_config.display_height != desired_display_h) {
-        printf("\n[LCD_ERROR] GFXSS_dc_config.display_height = %ld\n", GFXSS_dc_config.display_height);
-    } else if (GFXSS_dc_config.gfx_layer_config->width != desired_display_w) {
+    if (GFXSS_dc_config.display_width != desired_display_w)
+    {
+        printf("\n[LCD_ERROR] GFXSS_dc_config.display_width = %" PRIu32 "\n", GFXSS_dc_config.display_width);
+    }
+    else if (GFXSS_dc_config.display_height != desired_display_h) {
+        printf("\n[LCD_ERROR] GFXSS_dc_config.display_height = %" PRIu32 "\n", GFXSS_dc_config.display_height);
+    }
+    else if (GFXSS_dc_config.gfx_layer_config->width != desired_display_w)
+    {
         printf("\n[LCD_ERROR] GFXSS_dc_config.gfx_layer_config.width = %d\n", GFXSS_dc_config.gfx_layer_config->width);
-    } else if (GFXSS_dc_config.gfx_layer_config->height != desired_display_h) {
+    }
+    else if (GFXSS_dc_config.gfx_layer_config->height != desired_display_h)
+    {
         printf("\n[LCD_ERROR] GFXSS_dc_config.gfx_layer_config.height = %d\n", GFXSS_dc_config.gfx_layer_config->height);
-    } else if (GFXSS_mipidsi_display_params.hdisplay != desired_display_w) {
+    }
+    else if (GFXSS_mipidsi_display_params.hdisplay != desired_display_w)
+    {
         printf("\n[LCD_ERROR] GFXSS_mipidsi_display_params.hdisplay = %d\n", GFXSS_mipidsi_display_params.hdisplay);
-    } else if (GFXSS_mipidsi_display_params.vdisplay != desired_display_h) {
+    }
+    else if (GFXSS_mipidsi_display_params.vdisplay != desired_display_h)
+    {
         printf("\n[LCD_ERROR] GFXSS_mipidsi_display_params.vdisplay = %d\n", GFXSS_mipidsi_display_params.vdisplay);
-    } else {
+    }
+    else
+    {
         display_error = false; /* all is good if it reaches else */
     }
-    if (display_error == true) {
+    if (display_error == true)
+    {
         printf("\nPlease adjust your design.modus as appropraite for your selected build option display.\r\n");
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
     }
 
     /* Initialize buffer states - clear any startup artifacts */
     printf("[LCD_TASK] Clearing all buffers at startup\n");
-    for (int i = 0; i < NUM_IMAGE_BUFFERS; i++) {
+    for (int i = 0; i < NUM_IMAGE_BUFFERS; i++)
+    {
         _ImageBuff[i].BufReady = 0;
         _ImageBuff[i].NumBytes = 0;
     }
@@ -2072,9 +2255,12 @@ void cm55_ns_gfx_task(void *arg)
     /* Initialize database user count */
     printf("[LCD_TASK] Initializing database user count...\n");
     ifx_faceid_rslt_t db_result = update_database_user_count();
-    if (db_result != IFX_FACEID_RSLT_SUCCESS) {
+    if (db_result != IFX_FACEID_RSLT_SUCCESS)
+    {
         printf("[LCD_TASK][WARNING] Failed to initialize database user count: %d\n", db_result);
-    } else {
+    }
+    else
+    {
         printf("[LCD_TASK] Database initialized with %d users\n", current_user_count);
     }
 
@@ -2093,12 +2279,21 @@ void cm55_ns_gfx_task(void *arg)
         {
             /* get the latest input image to the input image buffer (image_buf_int8) */
             image_buf = getInputImage();
-            if (image_buf == NULL) {
-
+            if (image_buf == NULL)
+            {
                 vTaskDelay(pdMS_TO_TICKS(10)); /* Needed to avoid race condition */
-
                 continue;
             }
+
+#ifdef ENABLE_WEB_STREAMING
+            /* When UART streaming: Run Face ID but skip LCD rendering to maximize FPS
+             * Face ID inference: ~25-30ms (fast enough)
+             * LCD rendering: ~50-100ms (V-sync bottleneck)
+             * This gives best of both worlds: face recognition + high FPS streaming
+             * NOTE: Frame capture now happens inside getInputImage() BEFORE buffer is cleared */
+            bool is_uart_streaming = chunked_stream_is_active();
+
+#endif
 
             /* Update database user count every frame (lightweight operation) */
             db_update_result = update_database_user_count();
@@ -2118,6 +2313,7 @@ void cm55_ns_gfx_task(void *arg)
                     &faceid_embeddings,
                     augment,
                     &inference_config);
+
             if (ifx_result != IFX_FACEID_RSLT_SUCCESS)
             {
                 printf("[LCD_TASK][ERROR] Face inference failed with error: %u\n", ifx_result);
@@ -2128,15 +2324,70 @@ void cm55_ns_gfx_task(void *arg)
                 ifx_on_dev_enroll_stats_t progress;
                 ifx_faceid_rslt_t enroll_result = IFX_FACEID_RSLT_SUCCESS;
 
-                if (enrollment_state == ENROLLMENT_STATE_WAITING_FOR_REFERENCE) {
+                if (enrollment_state == ENROLLMENT_STATE_WAITING_FOR_REFERENCE)
+                {
                     /* Try to capture reference image using init mode */
                     enroll_result = ifx_on_device_enrollment(&prediction, &opt, ENROLL_MODE_INIT, &progress, &enrollment_config);
                     current_enrollment_feedback = enroll_result;  /* Store feedback */
-                    if (enroll_result == IFX_FACEID_RSLT_SUCCESS) {
+                    if (enroll_result == IFX_FACEID_RSLT_SUCCESS)
+                    {
                         /* Reference captured successfully */
                         printf("[LCD_TASK] Reference face acquired, now collecting poses\n");
                         enrollment_state = ENROLLMENT_STATE_COLLECTING;
-                    } else if (enroll_result != IFX_FACEID_RSLT_ENROLL_WAITING) {
+#ifdef ENABLE_WEB_STREAMING
+                        /* Send progress update via UART */
+                        if (chunked_stream_is_active())
+                        {
+                            char user_name[20];
+                            snprintf(user_name, sizeof(user_name), "User_%d", current_user_count);
+
+                            /* Calculate current pose based on actual face orientation */
+                            uint8_t current_pose = 0;
+                            if (prediction.count == 1)
+                            {
+                                int pose_idx = ifx_face_id_get_pose_bin_index(&enrollment_config, prediction.yaw[0], prediction.pitch[0], prediction.roll[0]);
+                                printf("[ENROLL_REF] Yaw=%.1f, Pitch=%.1f, Roll=%.1f -> Pose=%d\n",
+                                       (double)prediction.yaw[0], (double)prediction.pitch[0], (double)prediction.roll[0], pose_idx);
+                                if (pose_idx >= 0 && pose_idx < progress.num_poses) {
+                                    current_pose = (uint8_t)pose_idx;
+                                }
+                            }
+                            else
+                            {
+                                /* If no valid face detected, find first in-progress pose */
+                                for (int i = 0; i < progress.num_poses; i++)
+                                {
+                                    if (progress.enroll_progress[i] == PROGRESS_IN_PROGRESS)
+                                    {
+                                        current_pose = i;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            /* Calculate overall progress percentage */
+                            uint8_t completed = 0;
+                            for (int i = 0; i < progress.num_poses; i++)
+                            {
+                                if (progress.enroll_progress[i] == PROGRESS_COMPLETED) completed++;
+                            }
+                            uint8_t progress_percent = (completed * 100) / progress.num_poses;
+
+                            /* Convert progress enum to percentages */
+                            uint8_t pose_progress[MAX_ENROLLMENT_POSES] = {0};
+                            for (int i = 0; i < progress.num_poses && i < MAX_ENROLLMENT_POSES; i++)
+                            {
+                                pose_progress[i] = (progress.enroll_progress[i] == PROGRESS_COMPLETED) ? 100 :
+                                                  (progress.enroll_progress[i] == PROGRESS_IN_PROGRESS) ? 50 : 0;
+                            }
+
+                            chunked_stream_push_enrollment_progress(2, current_pose, progress.num_poses,
+                                                                   progress_percent, pose_progress, user_name);
+                        }
+#endif
+                    }
+                    else if (enroll_result != IFX_FACEID_RSLT_ENROLL_WAITING)
+                    {
                         /* Error occurred */
                         printf("[LCD_TASK][ERROR] Failed to initialize enrolment\n");
                         enrollment_state = ENROLLMENT_STATE_NONE;
@@ -2145,12 +2396,68 @@ void cm55_ns_gfx_task(void *arg)
                     }
                     /* If enroll_result == IFX_FACEID_RSLT_ENROLL_WAITING, keep waiting for reference */
                 }
-                else if (enrollment_state == ENROLLMENT_STATE_COLLECTING) {
+                else if (enrollment_state == ENROLLMENT_STATE_COLLECTING)
+                {
                     /* Automatically update enrolment with the current face data */
                     enroll_result = ifx_on_device_enrollment(&prediction, &opt, ENROLL_MODE_UPDATE, &progress, &enrollment_config);
+
+#ifdef ENABLE_WEB_STREAMING
+                    /* Send periodic progress updates (throttled to every ~3 frames for responsive UI) */
+                    static uint32_t enroll_update_count = 0;
+                    if (chunked_stream_is_active() && (++enroll_update_count % 3) == 0)
+                    {
+                        char user_name[20];
+                        snprintf(user_name, sizeof(user_name), "User_%d", current_user_count);
+
+                        /* Calculate current pose based on actual face orientation */
+                        uint8_t current_pose = 0;
+                        if (prediction.count == 1)
+                        {
+                            int pose_idx = ifx_face_id_get_pose_bin_index(&enrollment_config, prediction.yaw[0], prediction.pitch[0], prediction.roll[0]);
+                            printf("[ENROLL] Yaw=%.1f, Pitch=%.1f, Roll=%.1f -> Pose=%d\n",
+                                   (double)prediction.yaw[0], (double)prediction.pitch[0], (double)prediction.roll[0], pose_idx);
+                            if (pose_idx >= 0 && pose_idx < progress.num_poses)
+                            {
+                                current_pose = (uint8_t)pose_idx;
+                            }
+                        }
+                        else
+                        {
+                            /* If no valid face detected, find first incomplete pose */
+                            for (int i = 0; i < progress.num_poses; i++)
+                            {
+                                if (progress.enroll_progress[i] != PROGRESS_COMPLETED)
+                                {
+                                    current_pose = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        /* Calculate overall progress percentage */
+                        uint8_t completed = 0;
+                        for (int i = 0; i < progress.num_poses; i++)
+                        {
+                            if (progress.enroll_progress[i] == PROGRESS_COMPLETED) completed++;
+                        }
+                        uint8_t progress_percent = (completed * 100) / progress.num_poses;
+
+                        /* Convert progress enum to percentages */
+                        uint8_t pose_progress[MAX_ENROLLMENT_POSES] = {0};
+                        for (int i = 0; i < progress.num_poses && i < MAX_ENROLLMENT_POSES; i++)
+                        {
+                            pose_progress[i] = (progress.enroll_progress[i] == PROGRESS_COMPLETED) ? 100 :
+                                              (progress.enroll_progress[i] == PROGRESS_IN_PROGRESS) ? 50 : 0;
+                        }
+
+                        chunked_stream_push_enrollment_progress(2, current_pose, progress.num_poses,
+                                                               progress_percent, pose_progress, user_name);
+                    }
+#endif
                     current_enrollment_feedback = enroll_result;  /* Store feedback */
                     /* Check if all poses are completed and auto-complete enrolment */
-                    if (is_enrollment_complete(&progress)) {
+                    if (is_enrollment_complete(&progress))
+                    {
                         enrollment_state = ENROLLMENT_STATE_COMPLETING;
                         /* Complete the enrolment process and add user to database */
                         ifx_result = ifx_complete_on_device_enrollment(&faceid_embeddings, &enrollment_config, &inference_config);
@@ -2175,9 +2482,18 @@ void cm55_ns_gfx_task(void *arg)
 
                             /* Update user count after successful enrolment */
                             db_update_result = update_database_user_count();
-                            if (db_update_result != IFX_FACEID_RSLT_SUCCESS) {
+                            if (db_update_result != IFX_FACEID_RSLT_SUCCESS)
+                            {
                                 printf("[LCD_TASK][WARNING] Failed to update user count after enrolment: %d\n", db_update_result);
                             }
+
+#ifdef ENABLE_WEB_STREAMING
+                            /* Send completion notification via UART (state=4 for completed) */
+                            char user_name[20];
+                            snprintf(user_name, sizeof(user_name), "User_%d", current_user_count - 1);  /* -1 because count was just incremented */
+                            chunked_stream_push_enrollment_progress(4, progress.num_poses, progress.num_poses,
+                                                                   100, progress.enroll_progress, user_name);
+#endif
                         }
                         else if (ifx_result == IFX_FACEID_RSLT_DB_FULL)
                         {
@@ -2240,7 +2556,8 @@ void cm55_ns_gfx_task(void *arg)
 
                     /* Update user count after clearing */
                     db_update_result = update_database_user_count();
-                    if (db_update_result != IFX_FACEID_RSLT_SUCCESS) {
+                    if (db_update_result != IFX_FACEID_RSLT_SUCCESS)
+                    {
                         printf("[LCD_TASK][WARNING] Failed to update user count after clearing: %d\n", db_update_result);
                     }
                 }
@@ -2272,7 +2589,8 @@ void cm55_ns_gfx_task(void *arg)
 
                     /* Call the abort function to clean up */
                     ifx_result = ifx_abort_on_device_enrollment(&enrollment_config);
-                    if (ifx_result != IFX_FACEID_RSLT_SUCCESS) {
+                    if (ifx_result != IFX_FACEID_RSLT_SUCCESS)
+                    {
                         printf("[LCD_TASK][ERROR] Failed to properly abort enrolment\n");
                     }
 
@@ -2282,7 +2600,8 @@ void cm55_ns_gfx_task(void *arg)
                     current_display_mode = DISPLAY_MODE_INFERENCE;
                 }
 
-                else if (enrollment_state == ENROLLMENT_STATE_UART_TRANSFER) {
+                else if (enrollment_state == ENROLLMENT_STATE_UART_TRANSFER)
+                {
                     /* Can't cancel UART transfer mid-process */
                     printf("\n[LCD_TASK] Can't interrupt off-device enrolment during UART transfer\n");
                 }
@@ -2291,14 +2610,35 @@ void cm55_ns_gfx_task(void *arg)
 #ifndef DISABLE_ONDEV_ENROLL
 
             /* Start/stop enrolment button handler */
+#ifdef ENABLE_WEB_STREAMING
+            if (touch_button_event[FACE_ENROL_BUTTON_ID].pressed || touch_button_event[FACE_ENROL_BUTTON_ID].released || fid_home_start_enrollment_flag || fid_home_complete_enrollment_flag)
+#else
             if (touch_button_event[FACE_ENROL_BUTTON_ID].pressed || touch_button_event[FACE_ENROL_BUTTON_ID].released || fid_home_start_enrollment_flag)
-
+#endif
             {
+#ifdef ENABLE_WEB_STREAMING
+                bool was_uart_command = fid_home_start_enrollment_flag;
+                bool force_complete = fid_home_complete_enrollment_flag;
+                fid_home_complete_enrollment_flag = false;
+#endif
                 fid_home_start_enrollment_flag = false;
                 /* If not enrolling, start on-device enrolment */
-                if (enrollment_state == ENROLLMENT_STATE_NONE) {
+                if (enrollment_state == ENROLLMENT_STATE_NONE)
+                {
+#ifdef ENABLE_WEB_STREAMING
+                    /* For UART-triggered enrollment, require streaming to be active */
+                    if (was_uart_command && !chunked_stream_is_active())
+                    {
+                        printf("[LCD_TASK] Cannot start UART enrollment - streaming not active (send 'S' command first)\n");
+                        touch_button_event[FACE_ENROL_BUTTON_ID].pressed = false;
+                        /* Don't start enrollment */
+                    }
+
                     /* CHECK DATABASE CAPACITY BEFORE STARTING ENROLLMENT */
+                    else if (is_database_full())
+#else
                     if (is_database_full())
+#endif
                     {
                         printf("[LCD_TASK] Cannot start enrolment - database is full (%d/%d users)\n",
                                 current_user_count, MAX_N_USER);
@@ -2314,15 +2654,36 @@ void cm55_ns_gfx_task(void *arg)
                         enrollment_type = ENROLLMENT_TYPE_ON_DEVICE;
                         current_display_mode = DISPLAY_MODE_ENROLLMENT;
 
+#ifdef ENABLE_WEB_STREAMING
+                        /* Send initial enrollment progress (state=1: Waiting for Face) */
+                        if (chunked_stream_is_active())
+                        {
+                            char user_name[20];
+                            snprintf(user_name, sizeof(user_name), "User_%d", current_user_count);
+                            uint8_t pose_progress[MAX_ENROLLMENT_POSES] = {0};  /* All poses at 0% */
+                            chunked_stream_push_enrollment_progress(1, 0, 5, 0, pose_progress, user_name);
+                            printf("[LCD_TASK] Sent initial enrollment notification via UART\n");
+                        }
+#endif
                         touch_button_event[FACE_ENROL_BUTTON_ID].pressed = false;
 
                     }
                 }
                 /* If already in the collecting state, complete enrolment */
+#ifdef ENABLE_WEB_STREAMING
+                else if ((enrollment_state == ENROLLMENT_STATE_COLLECTING &&
+                         enrollment_type == ENROLLMENT_TYPE_ON_DEVICE) ||
+                         (force_complete && enrollment_state == ENROLLMENT_STATE_COLLECTING))
+#else
                 else if (enrollment_state == ENROLLMENT_STATE_COLLECTING &&
                         enrollment_type == ENROLLMENT_TYPE_ON_DEVICE)
+#endif
                 {
+#ifdef ENABLE_WEB_STREAMING
+                    printf("[LCD_TASK] Completing on-device enrolment%s...\n", force_complete ? " (early completion)" : "");
+#else
                     printf("[LCD_TASK] Completing on-device enrolment...\n");
+#endif
                     enrollment_state = ENROLLMENT_STATE_COMPLETING;
 
                     /* Complete the enrolment process and add user to database */
@@ -2344,7 +2705,8 @@ void cm55_ns_gfx_task(void *arg)
 
                         /* Update user count after successful enrolment */
                         db_update_result = update_database_user_count();
-                        if (db_update_result != IFX_FACEID_RSLT_SUCCESS) {
+                        if (db_update_result != IFX_FACEID_RSLT_SUCCESS)
+                        {
                             printf("[LCD_TASK][WARNING] Failed to update user count after enrolment: %d\n", db_update_result);
                         }
                     }
@@ -2355,7 +2717,8 @@ void cm55_ns_gfx_task(void *arg)
 
                         /* Call the abort function to clean up */
                         ifx_result = ifx_abort_on_device_enrollment(&enrollment_config);
-                        if (ifx_result != IFX_FACEID_RSLT_SUCCESS) {
+                        if (ifx_result != IFX_FACEID_RSLT_SUCCESS)
+                        {
                             printf("[LCD_TASK][ERROR] Failed to properly abort enrolment\n");
                         }
                     }
@@ -2365,7 +2728,8 @@ void cm55_ns_gfx_task(void *arg)
 
                         /* Call the abort function to clean up */
                         ifx_result = ifx_abort_on_device_enrollment(&enrollment_config);
-                        if (ifx_result != IFX_FACEID_RSLT_SUCCESS) {
+                        if (ifx_result != IFX_FACEID_RSLT_SUCCESS)
+                        {
                             printf("[LCD_TASK][ERROR] Failed to properly abort enrolment\n");
                         }
                     }
@@ -2380,7 +2744,8 @@ void cm55_ns_gfx_task(void *arg)
                 }
                 /* If in waiting state, cancel enrolment */
                 else if (enrollment_state == ENROLLMENT_STATE_WAITING_FOR_REFERENCE &&
-                        enrollment_type == ENROLLMENT_TYPE_ON_DEVICE) {
+                        enrollment_type == ENROLLMENT_TYPE_ON_DEVICE)
+                {
                     printf("[LCD_TASK] Cancelling on-device enrolment\n");
                     enrollment_state = ENROLLMENT_STATE_NONE;
                     enrollment_type = ENROLLMENT_TYPE_NONE;
@@ -2390,7 +2755,8 @@ void cm55_ns_gfx_task(void *arg)
 
                 }
                 /* If in UART transfer state, do nothing (can't cancel easily) */
-                else if (enrollment_state == ENROLLMENT_STATE_UART_TRANSFER) {
+                else if (enrollment_state == ENROLLMENT_STATE_UART_TRANSFER)
+                {
                     printf("[LCD_TASK] Can't interrupt off-device enrolment during UART transfer\n");
 
                     touch_button_event[FACE_ENROL_BUTTON_ID].released = false;
@@ -2407,55 +2773,145 @@ void cm55_ns_gfx_task(void *arg)
             fps = 1000.0f / (time_model_end - time_model_start);
 #endif /* SHOW_INFERENCING_TIME */
 
-            /* Use different display update based on mode */
-            update_lcd_display(&prediction, current_display_mode, current_enrollment_feedback, &enrollment_config);
-
-
-
-            /* Check for start face enrolment button state */
-            switch (touch_button_event[FACE_ENROL_BUTTON_ID].event)
+#ifdef ENABLE_WEB_STREAMING
+            /* Skip LCD rendering when UART streaming to maximize FPS
+             * LCD rendering + V-sync takes 50-100ms, limiting to 10-20 FPS
+             * Face ID results still computed and available over UART */
+            if (!is_uart_streaming)
             {
-            case TOUCH_BUTTON_EVENT_RELEASED: /* Start face enrolment button in released state */
-                /* Display start face enrolment button */
-                ifx_lcd_display_Rect(FACE_ENROL_BTN_X_POS, FACE_ENROL_BTN_Y_POS, (uint8_t *) start_face_enrolment_btn_img_map, START_FACE_ENROLMENT_BUTTON_WIDTH, START_FACE_ENROLMENT_BUTTON_HEIGHT);
-                break;
+#endif
+                /* Use different display update based on mode */
+                update_lcd_display(&prediction, current_display_mode, current_enrollment_feedback, &enrollment_config);
 
-            case TOUCH_BUTTON_EVENT_PRESSED: /* Save face enrolment button in pressed state */
-                /* Display save face enrolment button */
-                ifx_lcd_display_Rect(FACE_ENROL_BTN_X_POS, FACE_ENROL_BTN_Y_POS, (uint8_t *) save_face_enrolment_btn_img_map, SAVE_FACE_ENROLMENT_BUTTON_WIDTH, SAVE_FACE_ENROLMENT_BUTTON_HEIGHT);
-                break;
+
+
+                /* Check for start face enrolment button state */
+                switch (touch_button_event[FACE_ENROL_BUTTON_ID].event)
+                {
+                case TOUCH_BUTTON_EVENT_RELEASED: /* Start face enrolment button in released state */
+                    /* Display start face enrolment button */
+                    ifx_lcd_display_Rect(FACE_ENROL_BTN_X_POS, FACE_ENROL_BTN_Y_POS, (uint8_t *) start_face_enrolment_btn_img_map, START_FACE_ENROLMENT_BUTTON_WIDTH, START_FACE_ENROLMENT_BUTTON_HEIGHT);
+                    break;
+
+                case TOUCH_BUTTON_EVENT_PRESSED: /* Save face enrolment button in pressed state */
+                    /* Display save face enrolment button */
+                    ifx_lcd_display_Rect(FACE_ENROL_BTN_X_POS, FACE_ENROL_BTN_Y_POS, (uint8_t *) save_face_enrolment_btn_img_map, SAVE_FACE_ENROLMENT_BUTTON_WIDTH, SAVE_FACE_ENROLMENT_BUTTON_HEIGHT);
+                    break;
+                }
+
+                /* Check if clear enrolled users button is pressed */
+                if (TOUCH_BUTTON_EVENT_PRESSED == touch_button_event[CLEAR_ENROL_BUTTON_ID].event)
+                {
+                    /* Display clear enrolled users button in pressed state */
+                    touch_button_event[CLEAR_ENROL_BUTTON_ID].event = TOUCH_BUTTON_EVENT_RELEASED;
+                    ifx_lcd_display_Rect(CLEAR_BTN_X_POS, CLEAR_BTN_Y_POS, (uint8_t *) clear_pressed_btn_img_map, CLEAR_PRESSED_BUTTON_WIDTH, CLEAR_PRESSED_BUTTON_HEIGHT);
+                }
+                else
+                {
+                    /* Display clear enrolled users button in released state */
+                    ifx_lcd_display_Rect(CLEAR_BTN_X_POS, CLEAR_BTN_Y_POS, (uint8_t *) clear_released_btn_img_map, CLEAR_RELEASED_BUTTON_WIDTH, CLEAR_RELEASED_BUTTON_HEIGHT);
+                }
+
+                /* Check if cancel face enrolment button is pressed */
+                if (TOUCH_BUTTON_EVENT_PRESSED == touch_button_event[CANCEL_ENROL_BUTTON_ID].event)
+                {
+                    /* Display cancel face enrolment button in pressed state */
+                    touch_button_event[CANCEL_ENROL_BUTTON_ID].event = TOUCH_BUTTON_EVENT_RELEASED;
+                    ifx_lcd_display_Rect(CANCEL_BTN_X_POS, CANCEL_BTN_Y_POS, (uint8_t *) cancel_pressed_btn_img_map, CANCEL_PRESSED_BUTTON_WIDTH, CANCEL_PRESSED_BUTTON_HEIGHT);
+                }
+                else
+                {
+                    /* Display cancel face enrolment button in released state */
+                    ifx_lcd_display_Rect(CANCEL_BTN_X_POS, CANCEL_BTN_Y_POS, (uint8_t *) cancel_released_btn_img_map, CANCEL_RELEASED_BUTTON_WIDTH, CANCEL_RELEASED_BUTTON_HEIGHT);
+                }
+
+
+                /* switch frames to latest */
+                VG_switch_frame();
+#ifdef ENABLE_WEB_STREAMING
+            }
+            /* Send complete Face ID metadata AFTER inference (separate from image)
+             * Image frame was already queued right after getInputImage()
+             * Send metadata ALWAYS to report detection status (even 0 faces) */
+            if (is_uart_streaming && ifx_result == IFX_FACEID_RSLT_SUCCESS)
+            {
+                /* Build Face ID metadata array (max 4 faces) */
+                #define MAX_META_FACES 4
+                faceid_face_info_t faces[MAX_META_FACES];
+                uint8_t num_faces = (prediction.count > MAX_META_FACES) ? MAX_META_FACES : prediction.count;
+
+                /* Count known vs unknown faces */
+                int known_faces = 0;
+                for (int i = 0; i < num_faces; i++)
+                {
+                    if (prediction.id[i] >= 0)
+                    {
+                        known_faces++;
+                    }
+                }
+
+                /* Extract details for each detected face */
+                for (int i = 0; i < num_faces; i++)
+                {
+                    /* Extract bounding box (bbox format: [x1, y1, x2, y2]) */
+                    int16_t *bbox = &prediction.bbox_int16[i << 2];
+                    faces[i].bbox_x1 = bbox[0];
+                    faces[i].bbox_y1 = bbox[1];
+                    faces[i].bbox_x2 = bbox[2];
+                    faces[i].bbox_y2 = bbox[3];
+
+                    /* Extract user ID (-1 = unknown, >=0 = recognized) */
+                    faces[i].user_id = prediction.id[i];
+
+                    /* Extract confidence (convert float 0-1 to uint16 × 1000) */
+                    /* Use similarity for recognized faces, conf for detection quality */
+                    if (prediction.id[i] >= 0)
+                    {
+                        faces[i].confidence = (uint16_t)(prediction.similarity[i] * 1000.0f);
+                    } else {
+                        faces[i].confidence = (uint16_t)(prediction.conf[i] * 1000.0f);
+                    }
+
+                    /* Copy user name (15 chars max, null-terminated) */
+                    if (prediction.id[i] >= 0)
+                    {
+                        strncpy(faces[i].user_name, prediction.class_string[i], 15);
+                        faces[i].user_name[15] = '\0';
+                    } else {
+                        strcpy(faces[i].user_name, "Unknown");
+                    }
+                }
+
+                /* Send complete Face ID response via chunked protocol
+                 * Includes: total faces, known faces, all bounding boxes, user IDs, names, confidence */
+                bool metadata_sent = chunked_stream_push_faceid(num_faces, faces);
+
+                /* Debug: Log Face ID results and transmission status */
+                static uint32_t frame_count = 0;
+                frame_count++;
+
+                if (num_faces > 0)
+                {
+                    static uint32_t frame_with_faces = 0;
+                    frame_with_faces++;
+                    if ((frame_with_faces % 30) == 1) {  /* Log every 30 frames with faces */
+                        printf("[Face ID] Frame %" PRIu32 ": %d faces (%d known, %d unknown) - Metadata %s\r\n",
+                               frame_with_faces, num_faces, known_faces, num_faces - known_faces,
+                               metadata_sent ? "SENT" : "FAILED");
+                    }
+                }
+                else
+                {
+                    /* Log no-face detection periodically */
+                    if ((frame_count % 100) == 1)
+                    {
+                        printf("[Face ID] Frame %" PRIu32 ": No faces detected - Metadata %s\r\n",
+                               frame_count, metadata_sent ? "SENT" : "FAILED");
+                    }
+                }
             }
 
-            /* Check if clear enrolled users button is pressed */
-            if (TOUCH_BUTTON_EVENT_PRESSED == touch_button_event[CLEAR_ENROL_BUTTON_ID].event)
-            {
-                /* Display clear enrolled users button in pressed state */
-                touch_button_event[CLEAR_ENROL_BUTTON_ID].event = TOUCH_BUTTON_EVENT_RELEASED;
-                ifx_lcd_display_Rect(CLEAR_BTN_X_POS, CLEAR_BTN_Y_POS, (uint8_t *) clear_pressed_btn_img_map, CLEAR_PRESSED_BUTTON_WIDTH, CLEAR_PRESSED_BUTTON_HEIGHT);
-            }
-            else
-            {
-                /* Display clear enrolled users button in released state */
-                ifx_lcd_display_Rect(CLEAR_BTN_X_POS, CLEAR_BTN_Y_POS, (uint8_t *) clear_released_btn_img_map, CLEAR_RELEASED_BUTTON_WIDTH, CLEAR_RELEASED_BUTTON_HEIGHT);
-            }
-
-            /* Check if cancel face enrolment button is pressed */
-            if (TOUCH_BUTTON_EVENT_PRESSED == touch_button_event[CANCEL_ENROL_BUTTON_ID].event)
-            {
-                /* Display cancel face enrolment button in pressed state */
-                touch_button_event[CANCEL_ENROL_BUTTON_ID].event = TOUCH_BUTTON_EVENT_RELEASED;
-                ifx_lcd_display_Rect(CANCEL_BTN_X_POS, CANCEL_BTN_Y_POS, (uint8_t *) cancel_pressed_btn_img_map, CANCEL_PRESSED_BUTTON_WIDTH, CANCEL_PRESSED_BUTTON_HEIGHT);
-            }
-            else
-            {
-                /* Display cancel face enrolment button in released state */
-                ifx_lcd_display_Rect(CANCEL_BTN_X_POS, CANCEL_BTN_Y_POS, (uint8_t *) cancel_released_btn_img_map, CANCEL_RELEASED_BUTTON_WIDTH, CANCEL_RELEASED_BUTTON_HEIGHT);
-            }
-
-
-            /* switch frames to latest */
-            VG_switch_frame();
-
+#endif
             __DMB();
         }
 

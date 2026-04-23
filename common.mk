@@ -27,7 +27,7 @@ MTB_TYPE=PROJECT
 
 # Target board/hardware (BSP).
 # To change the target, it is recommended to use the Library manager
-# ('make library-manager' from command line), which will also update 
+# ('make library-manager' from command line), which will also update
 # Eclipse IDE launch configurations.
 TARGET=KIT_PSE84_EVAL_EPC2
 
@@ -46,14 +46,20 @@ TOOLCHAIN=GCC_ARM
 # Debug -- build with minimal optimizations, focus on debugging.
 # Release -- build with full optimizations
 # Custom -- build with custom configuration, set the optimization flag in CFLAGS
-# 
-# If CONFIG is manually edited, ensure to update or regenerate 
+#
+# If CONFIG is manually edited, ensure to update or regenerate
 # launch configurations for your IDE.
 CONFIG=Debug
 
 # Toolchains supported by this code example. See README.md file.
-# This is used by automated build systems to identify the supported toolchains. 
-MTB_SUPPORTED_TOOLCHAINS?=GCC_ARM
+# This is used by automated build systems to identify the supported toolchains.
+MTB_SUPPORTED_TOOLCHAINS?=GCC_ARM LLVM_ARM
+
+ifeq ($(TOOLCHAIN),GCC_ARM)
+    ifeq ($(CONFIG),Release)
+$(error GCC_ARM Release mode is not supported in this version of the code example)
+    endif
+endif
 ################################################################################
 # Advanced Configuration
 ################################################################################

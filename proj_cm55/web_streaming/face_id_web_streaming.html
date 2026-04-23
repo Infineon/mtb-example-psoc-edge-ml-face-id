@@ -1,0 +1,1842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSOC™ Edge E84 - Face ID System Monitor</title>
+    <style>
+        /* ===== INFINEON COLOR PALETTE ===== */
+        :root {
+            /* Ocean Palette */
+            --ocean-140: #06534B;
+            --ocean-120: #08665C;
+            --ocean-80: #3B9B91;
+            --ocean-60: #6CB4AD;
+            --ocean-40: #B8DEDA;
+            --ocean-20: #DFF4F3;
+
+            /* Accent Colors */
+            --lawn: #9BBA43;
+            --lawn-light: #B9D257;
+            --berry: #9C216E;
+            --berry-light: #BE3283;
+            --engineering: #575352;
+            --engineering-light: #8D8786;
+            --sun: #F97414;
+            --sun-light: #FF9737;
+            --sand: #FCD442;
+            --sand-light: #FBE273;
+
+            /* UI Variables */
+            --bg-primary: #0a0f14;
+            --bg-secondary: var(--ocean-140);
+            --bg-card: #0e1419;
+            --bg-elevated: #121a1f;
+            --border-color: var(--ocean-80);
+            --border-subtle: rgba(59, 155, 145, 0.2);
+            --text-primary: #ffffff;
+            --text-secondary: var(--ocean-40);
+            --text-dim: var(--ocean-60);
+
+            --accent-primary: var(--ocean-80);
+            --accent-secondary: var(--lawn);
+            --warning: var(--sun);
+            --danger: var(--berry);
+            --success: var(--lawn);
+
+            --radius: 8px;
+            --radius-lg: 12px;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+            --transition: all 0.2s ease;
+        }
+
+        /* ===== RESET & BASE ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ===== HEADER ===== */
+        header {
+            background: linear-gradient(135deg, var(--ocean-140), var(--ocean-120));
+            border-bottom: 2px solid var(--ocean-80);
+            padding: 1rem 2rem;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header-logo {
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+        }
+
+        header p {
+            font-size: 0.85rem;
+            color: var(--ocean-40);
+            margin-top: 0.25rem;
+            font-weight: 300;
+        }
+
+        /* ===== MAIN LAYOUT ===== */
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+            max-width: 1920px;
+            margin: 0 auto;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* ===== CARDS ===== */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            border-color: var(--border-color);
+        }
+
+        .card-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-primary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: var(--accent-primary);
+            border-radius: 2px;
+        }
+
+        /* ===== CONTROL PANEL ===== */
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .btn {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.1));
+            opacity: 0;
+            transition: var(--transition);
+        }
+
+        .btn:hover:not(:disabled)::before {
+            opacity: 1;
+        }
+
+        .btn:hover:not(:disabled) {
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 155, 145, 0.3);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--ocean-120), var(--ocean-80));
+            border-color: var(--ocean-80);
+            font-weight: 600;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--lawn), var(--lawn-light));
+            border-color: var(--lawn);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--sun), var(--sun-light));
+            border-color: var(--sun);
+            color: #000;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--berry), var(--berry-light));
+            border-color: var(--berry);
+        }
+
+        /* ===== STATUS BAR ===== */
+        .status-bar {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .status-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+        }
+
+        .status-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--engineering);
+            box-shadow: 0 0 8px rgba(87, 83, 82, 0.6);
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: var(--ocean-80);
+            box-shadow: 0 0 12px var(--ocean-80);
+        }
+
+        .status-indicator.streaming {
+            background: var(--lawn);
+            box-shadow: 0 0 12px var(--lawn);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        /* ===== VIDEO CANVAS ===== */
+        .video-container {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            position: relative;
+        }
+
+        #videoCanvas {
+            border-radius: var(--radius);
+            image-rendering: pixelated;
+            box-shadow: var(--shadow-lg);
+            max-width: 100%;
+            height: auto;
+            width: 640px; /* Default 2x scale */
+        }
+
+        .scale-controls {
+            display: flex;
+            gap: 0.5rem;
+            background: var(--bg-card);
+            padding: 0.5rem;
+            border-radius: var(--radius);
+        }
+
+        .scale-btn {
+            padding: 0.4rem 0.75rem;
+            font-size: 0.75rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .scale-btn.active {
+            background: var(--ocean-80);
+            color: var(--text-primary);
+            border-color: var(--ocean-80);
+        }
+
+        .scale-btn:hover {
+            border-color: var(--accent-primary);
+        }
+
+        /* ===== STATISTICS GRID ===== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: var(--transition);
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-color);
+            transform: translateY(-2px);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-unit {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        /* ===== GRAPHS ===== */
+        .graph-container {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .graph-label {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        canvas.graph {
+            width: 100%;
+            height: 80px;
+            border-radius: 4px;
+            background: var(--bg-card);
+        }
+
+        /* ===== CONSOLE LOG ===== */
+        .console {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: var(--text-dim);
+            min-width: 70px;
+            font-size: 0.7rem;
+        }
+
+        .log-type {
+            min-width: 60px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+        }
+
+        .log-type.info { color: var(--ocean-60); }
+        .log-type.success { color: var(--lawn); }
+        .log-type.warning { color: var(--sun); }
+        .log-type.error { color: var(--berry); }
+
+        .log-message {
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        /* Custom Scrollbar */
+        .console::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .console::-webkit-scrollbar-track {
+            background: var(--bg-card);
+            border-radius: 4px;
+        }
+
+        .console::-webkit-scrollbar-thumb {
+            background: var(--ocean-80);
+            border-radius: 4px;
+        }
+
+        .console::-webkit-scrollbar-thumb:hover {
+            background: var(--ocean-60);
+        }
+
+        /* ===== ENROLLMENT OVERLAY ===== */
+        .enrollment-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 15, 20, 0.85);  /* Semi-transparent overlay */
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .enrollment-overlay.active {
+            display: flex;
+        }
+
+        .enrollment-video-container {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-card);
+            border: 3px solid var(--ocean-80);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+        }
+
+        .enrollment-video-frame {
+            width: 640px;
+            height: 480px;
+            display: block;
+            background: #000;
+            image-rendering: pixelated;
+        }
+
+        .enrollment-content {
+            background: var(--bg-elevated);
+            border-top: 2px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            text-align: center;
+            width: 640px;
+        }
+
+        .enrollment-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .enrollment-user {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .progress-bar-container {
+            background: var(--bg-elevated);
+            border-radius: 999px;
+            height: 24px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--ocean-80), var(--lawn));
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .pose-indicators {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .pose-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .pose-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+
+        .pose-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--engineering);
+            border: 2px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            transition: var(--transition);
+        }
+
+        .pose-circle.in-progress {
+            background: var(--sun);
+            border-color: var(--sun);
+            animation: pulse 1s infinite;
+            position: relative;
+        }
+
+        /* Animated ring around current pose */
+        .pose-circle.current-pose {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 0 rgba(59, 155, 145, 0.7);
+            animation: pose-ring 1.5s ease-out infinite;
+            transform: scale(1.1);
+        }
+
+        @keyframes pose-ring {
+            0% {
+                box-shadow: 0 0 0 0 rgba(59, 155, 145, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(59, 155, 145, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(59, 155, 145, 0);
+            }
+        }
+
+        .pose-circle.completed {
+            background: var(--lawn);
+            border-color: var(--lawn);
+        }
+
+        .pose-circle.completed::after {
+            content: '✓';
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* ===== FACE LIST ===== */
+        .face-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .face-item {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--lawn);
+            border-radius: var(--radius);
+            padding: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: var(--transition);
+        }
+
+        .face-item.unknown {
+            border-left-color: var(--sun);
+        }
+
+        .face-item:hover {
+            border-color: var(--border-color);
+            transform: translateX(4px);
+        }
+
+        .face-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .face-confidence {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        /* ===== SYSTEM INFO ===== */
+        .info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.5rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .info-label {
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        .info-value {
+            color: var(--text-primary);
+            font-family: 'Consolas', monospace;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1400px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                grid-column: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            header {
+                padding: 0.75rem 1rem;
+            }
+
+            header h1 {
+                font-size: 1.25rem;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* ===== HIDDEN UTILITY ===== */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <h1>
+            <img src="facial-recognition-icon.eps.png" alt="Face ID" class="header-logo">
+            PSOC™ Edge E84 - Face ID System Monitor
+        </h1>
+        <p>WebSerial Real-Time Streaming • UART 2 Mbps • Chrome/Edge 89+</p>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Control Panel -->
+            <div class="card">
+                <div class="card-title">🎮 Control Panel</div>
+                <div class="controls">
+                    <button id="connectBtn" class="btn btn-primary">🔌 Connect Device</button>
+                    <button id="startStreamBtn" class="btn btn-success hidden">▶️ Start Stream</button>
+                    <button id="stopStreamBtn" class="btn btn-warning hidden">⏸️ Stop Stream</button>
+                    <button id="enrollBtn" class="btn btn-success" disabled>👤 Enroll User</button>
+                    <button id="cancelEnrollBtn" class="btn btn-warning hidden" disabled>❌ Cancel Enroll</button>
+                    <button id="clearUsersBtn" class="btn btn-danger" disabled>🗑️ Clear All Users</button>
+                </div>
+            </div>
+
+            <!-- Status Bar -->
+            <div class="card">
+                <div class="card-title">📊 System Status</div>
+                <div class="status-bar">
+                    <div class="status-item">
+                        <div class="status-label">Connection</div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div id="statusIndicator" class="status-indicator"></div>
+                            <div class="status-value" id="statusText">Disconnected</div>
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">FPS (Current)</div>
+                        <div class="status-value"><span id="fpsDisplay">0.0</span> <span class="stat-unit">fps</span></div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">FPS (Average)</div>
+                        <div class="status-value"><span id="fpsAvgDisplay">0.0</span> <span class="stat-unit">fps</span></div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Throughput</div>
+                        <div class="status-value"><span id="throughputDisplay">0</span> <span class="stat-unit">KB/s</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Canvas -->
+            <div class="video-container">
+                <canvas id="videoCanvas" width="320" height="240"></canvas>
+                <div class="scale-controls">
+                    <button class="scale-btn" data-scale="1x">1× (320×240)</button>
+                    <button class="scale-btn active" data-scale="2x">2× (640×480)</button>
+                    <button class="scale-btn" data-scale="fit">Fit Width</button>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="card">
+                <div class="card-title">📈 Performance Metrics</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Frames</div>
+                        <div class="stat-value" id="totalFrames">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">CRC Errors</div>
+                        <div class="stat-value" id="crcErrors">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Error Rate</div>
+                        <div class="stat-value"><span id="errorRate">0.0</span><span class="stat-unit">%</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Data Transfer</div>
+                        <div class="stat-value"><span id="totalData">0</span><span class="stat-unit">MB</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Graphs -->
+            <div class="card">
+                <div class="card-title">📉 Real-Time Graphs</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+                    <div class="graph-container">
+                        <div class="graph-label">FPS Over Time</div>
+                        <canvas id="fpsGraph" class="graph" width="300" height="80"></canvas>
+                    </div>
+                    <div class="graph-container">
+                        <div class="graph-label">Throughput (KB/s)</div>
+                        <canvas id="throughputGraph" class="graph" width="300" height="80"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- JPEG Quality Control - MOVED TO TOP SO IT DOESN'T JUMP -->
+            <div class="card">
+                <div class="card-title">🎨 JPEG Quality</div>
+                <div class="controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
+                    <button id="quality0Btn" class="btn btn-success active" data-quality="0" style="font-size: 0.85rem; padding: 0.5rem;">🌟 BEST</button>
+                    <button id="quality1Btn" class="btn btn-success" data-quality="1" style="font-size: 0.85rem; padding: 0.5rem;">⚡ HIGH</button>
+                    <button id="quality2Btn" class="btn btn-warning" data-quality="2" style="font-size: 0.85rem; padding: 0.5rem;">📦 MED</button>
+                    <button id="quality3Btn" class="btn btn-danger" data-quality="3" style="font-size: 0.85rem; padding: 0.5rem;">💾 LOW</button>
+                </div>
+                <div class="info-grid">
+                    <div class="info-label">Current:</div>
+                    <div class="info-value" id="currentQuality">BEST (0)</div>
+
+                    <div class="info-label">Frame Size:</div>
+                    <div class="info-value"><span id="frameSize">0</span> KB</div>
+
+                    <div class="info-label">Avg Size:</div>
+                    <div class="info-value"><span id="avgFrameSize">0</span> KB</div>
+
+                    <div class="info-label">Compression:</div>
+                    <div class="info-value"><span id="compressionRatio">0</span>:1</div>
+                </div>
+            </div>
+
+            <!-- Face Detection - MOVED BELOW JPEG QUALITY -->
+            <div class="card">
+                <div class="card-title">👤 Detected Faces</div>
+                <div id="faceListContainer" class="hidden">
+                    <div style="margin-bottom: 1rem; display: flex; gap: 1rem; font-size: 0.85rem;">
+                        <span style="color: var(--text-dim);">Total: <strong id="totalFaces" style="color: var(--accent-primary);">0</strong></span>
+                        <span style="color: var(--text-dim);">Known: <strong id="knownFaces" style="color: var(--lawn);">0</strong></span>
+                        <span style="color: var(--text-dim);">Unknown: <strong id="unknownFaces" style="color: var(--sun);">0</strong></span>
+                    </div>
+                    <div id="faceList" class="face-list"></div>
+                </div>
+                <div id="noFacesMessage" style="color: var(--text-dim); text-align: center; padding: 2rem;">
+                    No faces detected
+                </div>
+            </div>
+
+            <!-- System Information -->
+            <div class="card">
+                <div class="card-title">ℹ️ System Information</div>
+                <div class="info-grid">
+                    <div class="info-label">Device:</div>
+                    <div class="info-value">PSOC™ Edge E84</div>
+
+                    <div class="info-label">Processor:</div>
+                    <div class="info-value">ARM Cortex-M55</div>
+
+                    <div class="info-label">Camera:</div>
+                    <div class="info-value">USB UVC 320×240</div>
+
+                    <div class="info-label">UART:</div>
+                    <div class="info-value">2 Mbps (2,000,000 baud)</div>
+
+                    <div class="info-label">Protocol:</div>
+                    <div class="info-value">Chunked 1KB + CRC16</div>
+
+                    <div class="info-label">Compression:</div>
+                    <div class="info-value">JPEG BEST Quality (4:4:4)</div>
+
+                    <div class="info-label">Max Users:</div>
+                    <div class="info-value">5</div>
+                </div>
+            </div>
+
+            <!-- Console Log -->
+            <div class="card">
+                <div class="card-title">🖥️ Console Log</div>
+                <div id="console" class="console"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enrollment Overlay - Centered 640×480 View -->
+    <div id="enrollmentOverlay" class="enrollment-overlay">
+        <div class="enrollment-video-container">
+            <!-- Video Display (640×480) -->
+            <canvas id="enrollmentCanvas" class="enrollment-video-frame"></canvas>
+
+            <!-- Enrollment Status Bar -->
+            <div class="enrollment-content">
+                <div class="enrollment-title" id="enrollmentState">ENROLLMENT</div>
+                <div class="enrollment-user" id="enrollmentUser">User_0</div>
+                <div class="progress-bar-container">
+                    <div id="enrollmentProgress" class="progress-bar" style="width: 0%;">
+                        <span id="enrollmentPercent">0%</span>
+                    </div>
+                </div>
+                <div class="pose-indicators" id="poseIndicators">
+                    <div class="pose-item">
+                        <div class="pose-circle">⬆️</div>
+                        <div class="pose-label">Up</div>
+                    </div>
+                    <div class="pose-item">
+                        <div class="pose-circle">⬇️</div>
+                        <div class="pose-label">Down</div>
+                    </div>
+                    <div class="pose-item">
+                        <div class="pose-circle">⬅️</div>
+                        <div class="pose-label">Left</div>
+                    </div>
+                    <div class="pose-item">
+                        <div class="pose-circle">➡️</div>
+                        <div class="pose-label">Right</div>
+                    </div>
+                    <div class="pose-item">
+                        <div class="pose-circle">🔵</div>
+                        <div class="pose-label">Center</div>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+                    <button id="cancelEnrollmentBtn" class="btn btn-danger" style="flex: 1;">❌ Cancel</button>
+                    <button id="completeEnrollmentBtn" class="btn btn-success hidden" style="flex: 1;">✅ Complete (3+ poses)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== CONSTANTS =====
+        const BAUDRATE = 2000000;
+        const CHUNK_TYPES = {
+            IMAGE_START: 0x01,
+            IMAGE_DATA: 0x02,
+            IMAGE_END: 0x03,
+            FACEID_META: 0x04,
+            ENROLL_PROGRESS: 0x06,
+            ENROLL_COMPLETE: 0x07
+        };
+
+        // ===== GLOBAL STATE =====
+        let port = null;
+        let reader = null;
+        let isStreaming = false;
+        let isEnrolling = false;
+
+        let frameCount = 0;
+        let errorCount = 0;
+        let totalBytes = 0;
+        let startTime = null;
+        let fpsBuffer = [];
+        let throughputBuffer = [];
+
+        let frameBuffer = [];
+        let currentSequence = 0;
+        let chunksReceived = 0;
+        let totalChunks = 0;
+
+        // JPEG Quality & Statistics
+        let currentQuality = 0; // 0=BEST, 1=HIGH, 2=MED, 3=LOW
+        let frameSizes = [];
+        let frameSizeSum = 0;
+        let frameSizeCount = 0;
+        const RAW_FRAME_SIZE = 320 * 240 * 2; // RGB565 uncompressed size
+
+        // FPS calculation tracking for instantaneous FPS
+        let lastFPSUpdateTime = 0;
+        let lastFPSCalcTime = null;
+        let recentFrameCount = 0;
+        let lastGraphUpdateTime = 0;
+        const FPS_UPDATE_INTERVAL = 200;  // Update FPS display every 200ms for responsiveness
+        const GRAPH_UPDATE_INTERVAL = 1000; // Update graphs every 1 second to show trends
+
+        let currentFaces = [];
+        let enrollmentProgress = {
+            state: 0,
+            current_pose: 0,
+            total_poses: 5,
+            progress_percent: 0,
+            pose_progress: [0, 0, 0, 0, 0],
+            user_name: ''
+        };
+
+        // ===== DOM ELEMENTS (will be initialized after DOM loads) =====
+        let connectBtn, startStreamBtn, stopStreamBtn, enrollBtn, cancelEnrollBtn, clearUsersBtn;
+        let canvas, ctx, enrollmentOverlay;
+
+        // ===== CONSOLE LOGGING =====
+        function log(message, type = 'info') {
+            const consoleDiv = document.getElementById('console');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-time';
+            timeSpan.textContent = time;
+
+            const typeSpan = document.createElement('span');
+            typeSpan.className = `log-type ${type}`;
+            typeSpan.textContent = type.toUpperCase();
+
+            const messageSpan = document.createElement('span');
+            messageSpan.className = 'log-message';
+            messageSpan.textContent = message;
+
+            entry.appendChild(timeSpan);
+            entry.appendChild(typeSpan);
+            entry.appendChild(messageSpan);
+
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+
+            // Limit console to 100 entries
+            while (consoleDiv.children.length > 100) {
+                consoleDiv.removeChild(consoleDiv.firstChild);
+            }
+        }
+
+        // ===== CONNECTION =====
+        async function connectToDevice() {
+            if (!('serial' in navigator)) {
+                alert('❌ WebSerial API not supported!\n\nPlease use Chrome 89+ or Edge 89+');
+                log('WebSerial API not supported in this browser', 'error');
+                return;
+            }
+
+            try {
+                log('Requesting serial port...', 'info');
+                port = await navigator.serial.requestPort();
+
+                await port.open({ baudRate: BAUDRATE });
+
+                updateStatus('Connected', true, false);
+                log('✅ Device connected successfully!', 'success');
+                log(`Port opened at ${BAUDRATE} baud`, 'info');
+
+                connectBtn.textContent = '🔌 Disconnect';
+                startStreamBtn.classList.remove('hidden');
+
+                startReading();
+            } catch (error) {
+                log(`Connection failed: ${error.message}`, 'error');
+                updateStatus('Disconnected', false, false);
+            }
+        }
+
+        async function disconnectFromDevice() {
+            // Send 'Q' command to stop streaming before disconnect
+            if (isStreaming && port && port.writable) {
+                try {
+                    await sendCommand('Q');
+                    await new Promise(resolve => setTimeout(resolve, 100)); // Wait for command to be sent
+                } catch (error) {
+                    log(`Error sending stop command: ${error.message}`, 'warning');
+                }
+                isStreaming = false;
+            }
+
+            if (reader) {
+                try {
+                    await reader.cancel();
+                } catch (error) {
+                    // Ignore cancel errors
+                }
+                reader = null;
+            }
+
+            if (port) {
+                try {
+                    await port.close();
+                } catch (error) {
+                    log(`Error closing port: ${error.message}`, 'warning');
+                }
+                port = null;
+            }
+
+            updateStatus('Disconnected', false, false);
+            log('Device disconnected', 'warning');
+
+            connectBtn.textContent = '🔌 Connect Device';
+            startStreamBtn.classList.add('hidden');
+            stopStreamBtn.classList.add('hidden');
+
+            // Disable enrollment controls
+            enrollBtn.disabled = true;
+            clearUsersBtn.disabled = true;
+        }
+
+        // ===== STREAMING =====
+        async function sendCommand(command) {
+            if (!port || !port.writable) {
+                log('Cannot send command: not connected', 'error');
+                return;
+            }
+
+            const writer = port.writable.getWriter();
+            await writer.write(new TextEncoder().encode(command));
+            writer.releaseLock();
+            log(`Sent command: '${command}'`, 'info');
+        }
+
+        async function startStreaming() {
+            await sendCommand('S');
+            isStreaming = true;
+            startTime = Date.now();
+            frameCount = 0;
+            errorCount = 0;
+            totalBytes = 0;
+            fpsBuffer = [];
+            throughputBuffer = [];
+
+            startStreamBtn.classList.add('hidden');
+            stopStreamBtn.classList.remove('hidden');
+
+            // Enable enrollment controls
+            enrollBtn.disabled = false;
+            clearUsersBtn.disabled = false;
+
+            updateStatus('Streaming', true, true);
+            log('═══════════════════════════════════════════════', 'success');
+            log('▶️ Streaming Started', 'success');
+            log('Receiving video frames + Face ID metadata...', 'info');
+        }
+
+        async function stopStreaming() {
+            await sendCommand('Q');
+            isStreaming = false;
+
+            stopStreamBtn.classList.add('hidden');
+            startStreamBtn.classList.remove('hidden');
+
+            // Disable enrollment controls
+            enrollBtn.disabled = true;
+            clearUsersBtn.disabled = true;
+
+            updateStatus('Connected', true, false);
+            log('Streaming stopped', 'warning');
+        }
+
+        // ===== JPEG QUALITY CONTROL =====
+        async function setJPEGQuality(quality) {
+            if (quality < 0 || quality > 3) {
+                log(`Invalid quality: ${quality}`, 'error');
+                return;
+            }
+
+            const qualityNames = ['BEST', 'HIGH', 'MED', 'LOW'];
+            currentQuality = quality;
+
+            // Send command '0', '1', '2', or '3' to device
+            await sendCommand(String(quality));
+
+            // Update UI
+            document.querySelectorAll('.btn[data-quality]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.btn[data-quality="${quality}"]`).classList.add('active');
+            document.getElementById('currentQuality').textContent = `${qualityNames[quality]} (${quality})`;
+
+            // Reset statistics
+            frameSizes = [];
+            frameSizeSum = 0;
+            frameSizeCount = 0;
+
+            log(`📊 JPEG quality changed to ${qualityNames[quality]} (${quality})`, 'success');
+        }
+
+        function updateJPEGStatistics(jpegSize) {
+            // Update current frame size
+            const frameSizeKB = (jpegSize / 1024).toFixed(2);
+            document.getElementById('frameSize').textContent = frameSizeKB;
+
+            // Calculate rolling average (last 60 frames)
+            frameSizes.push(jpegSize);
+            if (frameSizes.length > 60) {
+                frameSizes.shift();
+            }
+
+            frameSizeSum += jpegSize;
+            frameSizeCount++;
+            const avgSize = (frameSizeSum / frameSizeCount / 1024).toFixed(2);
+            document.getElementById('avgFrameSize').textContent = avgSize;
+
+            // Calculate compression ratio (raw RGB565 vs JPEG)
+            const compressionRatio = (RAW_FRAME_SIZE / jpegSize).toFixed(1);
+            document.getElementById('compressionRatio').textContent = compressionRatio;
+        }
+
+        // ===== ENROLLMENT =====
+        async function startEnrollment() {
+            if (!isStreaming) {
+                alert('⚠️ Start Streaming First!\n\nYou need to click "▶️ Start Stream" before you can enroll a new user.');
+                log('⚠️ Enrollment requires active streaming', 'warning');
+                return;
+            }
+
+            await sendCommand('E');
+            isEnrolling = true;
+            enrollmentOverlay.classList.add('active');
+            enrollBtn.classList.add('hidden');
+            cancelEnrollBtn.classList.remove('hidden');
+            log('Enrollment started - look directly at camera', 'success');
+        }
+
+        async function cancelEnrollment() {
+            await sendCommand('C');
+            isEnrolling = false;
+            enrollmentOverlay.classList.remove('active');
+            cancelEnrollBtn.classList.add('hidden');
+            enrollBtn.classList.remove('hidden');
+            document.getElementById('completeEnrollmentBtn').classList.add('hidden');
+            log('Enrollment cancelled', 'warning');
+        }
+
+        async function forceCompleteEnrollment() {
+            // Check if at least 3 poses are complete
+            const completedPoses = enrollmentProgress.pose_progress.filter(p => p === 100).length;
+
+            if (completedPoses < 3) {
+                alert('⚠️ Need at least 3 poses!\n\nPlease capture at least 3 different poses before completing enrollment.');
+                log('Cannot complete: need at least 3 poses', 'warning');
+                return;
+            }
+
+            if (!confirm(`✅ Complete enrollment with ${completedPoses}/5 poses?\n\nUser: ${enrollmentProgress.user_name}\n\nClick OK to save this user.`)) {
+                return;
+            }
+
+            // Send 'F' command to force complete enrollment
+            await sendCommand('F');
+            log(`✅ Force completing enrollment with ${completedPoses}/5 poses for ${enrollmentProgress.user_name}`, 'success');
+
+            // UI will be updated when ENROLL_COMPLETE message arrives from firmware
+        }
+
+        async function clearAllUsers() {
+            if (!confirm('⚠️ Clear ALL enrolled users?\n\nThis will permanently delete all face data from the device.\n\nClick OK to confirm.')) {
+                return;
+            }
+
+            await sendCommand('X');
+            log('Clearing all enrolled users...', 'warning');
+        }
+
+        // ===== DATA READING =====
+        async function startReading() {
+            reader = port.readable.getReader();
+            let buffer = new Uint8Array(0);
+
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    const newBuffer = new Uint8Array(buffer.length + value.length);
+                    newBuffer.set(buffer);
+                    newBuffer.set(value, buffer.length);
+                    buffer = newBuffer;
+
+                    while (buffer.length >= 12) {
+                        const chunk = findAndParseChunk(buffer);
+                        if (!chunk) break;
+
+                        buffer = buffer.slice(chunk.bytesConsumed);
+                        processChunk(chunk);
+                    }
+                }
+            } catch (error) {
+                log(`Reading error: ${error.message}`, 'error');
+            } finally {
+                reader.releaseLock();
+            }
+        }
+
+        function findAndParseChunk(buffer) {
+            let magicIndex = -1;
+            for (let i = 0; i < buffer.length - 1; i++) {
+                if (buffer[i] === 0xAB && buffer[i + 1] === 0xCD) {
+                    magicIndex = i;
+                    break;
+                }
+            }
+
+            if (magicIndex === -1 || buffer.length < magicIndex + 12) {
+                return null;
+            }
+
+            const headerView = new DataView(buffer.buffer, buffer.byteOffset + magicIndex, 12);
+            const type = headerView.getUint8(2);
+            const sequence = headerView.getUint8(3);
+            const chunkId = headerView.getUint16(4, true);
+            const totalChunks = headerView.getUint16(6, true);
+            const payloadSize = headerView.getUint16(8, true);
+            const crcExpected = headerView.getUint16(10, true);
+
+            if (buffer.length < magicIndex + 12 + payloadSize) {
+                return null;
+            }
+
+            const payload = buffer.slice(magicIndex + 12, magicIndex + 12 + payloadSize);
+            const crcActual = crc16(payload);
+            const crcValid = crcActual === crcExpected;
+
+            if (!crcValid) {
+                errorCount++;
+                updateStats();
+            }
+
+            totalBytes += 12 + payloadSize;
+
+            return {
+                type,
+                sequence,
+                chunkId,
+                totalChunks,
+                payload,
+                crcValid,
+                bytesConsumed: magicIndex + 12 + payloadSize
+            };
+        }
+
+        function processChunk(chunk) {
+            switch (chunk.type) {
+                case CHUNK_TYPES.IMAGE_START:
+                    frameBuffer = Array.from(chunk.payload);
+                    currentSequence = chunk.sequence;
+                    chunksReceived = 1;
+                    totalChunks = chunk.totalChunks;
+                    break;
+
+                case CHUNK_TYPES.IMAGE_DATA:
+                    if (chunk.sequence === currentSequence) {
+                        frameBuffer.push(...chunk.payload);
+                        chunksReceived++;
+                    }
+                    break;
+
+                case CHUNK_TYPES.IMAGE_END:
+                    frameBuffer.push(...chunk.payload);
+                    chunksReceived++;
+
+                    if (chunksReceived === totalChunks) {
+                        displayFrame(new Uint8Array(frameBuffer));
+                        frameCount++;
+                        updateStats();
+                        updateFPS();
+                    }
+                    frameBuffer = [];
+                    break;
+
+                case CHUNK_TYPES.FACEID_META:
+                    parseFaceIDMetadata(chunk.payload);
+                    break;
+
+                case CHUNK_TYPES.ENROLL_PROGRESS:
+                    parseEnrollmentProgress(chunk.payload);
+                    break;
+
+                case CHUNK_TYPES.ENROLL_COMPLETE:
+                    parseEnrollmentProgress(chunk.payload);
+                    completeEnrollment();
+                    break;
+            }
+        }
+
+        // ===== FRAME DISPLAY =====
+        function displayFrame(jpegData) {
+            // Update JPEG statistics
+            updateJPEGStatistics(jpegData.length);
+
+            const blob = new Blob([jpegData], { type: 'image/jpeg' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+
+            img.onload = () => {
+                // Draw to main canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                drawFaceOverlays();
+
+                // If enrollment is active, also draw to enrollment canvas (640×480)
+                if (isEnrolling) {
+                    const enrollCanvas = document.getElementById('enrollmentCanvas');
+                    const enrollCtx = enrollCanvas.getContext('2d');
+
+                    // Set enrollment canvas to 640×480 (2x scale from 320×240)
+                    enrollCanvas.width = 640;
+                    enrollCanvas.height = 480;
+
+                    enrollCtx.clearRect(0, 0, enrollCanvas.width, enrollCanvas.height);
+                    enrollCtx.imageSmoothingEnabled = false;
+                    enrollCtx.drawImage(img, 0, 0, 640, 480);
+                }
+
+                URL.revokeObjectURL(url);
+            };
+
+            img.src = url;
+        }
+
+        function drawFaceOverlays() {
+            if (currentFaces.length === 0) return;
+
+            const scaleX = canvas.width / 320;
+            const scaleY = canvas.height / 240;
+
+            currentFaces.forEach((face) => {
+                const x1 = face.bbox.x1 * scaleX;
+                const y1 = face.bbox.y1 * scaleY;
+                const x2 = face.bbox.x2 * scaleX;
+                const y2 = face.bbox.y2 * scaleY;
+
+                const isKnown = face.user_id >= 0;
+                const color = isKnown ? '#9BBA43' : '#FF9737';
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = isKnown ? 3 : 2;
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                const label = `${face.user_name} (${face.confidence.toFixed(2)})`;
+                ctx.fillStyle = color;
+                ctx.fillRect(x1, y1 - 25, ctx.measureText(label).width + 10, 20);
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(label, x1 + 5, y1 - 10);
+            });
+        }
+
+        // ===== FACE ID PARSING =====
+        function parseFaceIDMetadata(payload) {
+            const numFaces = payload[0];
+            currentFaces = [];
+
+            if (numFaces === 0) {
+                document.getElementById('faceListContainer').classList.add('hidden');
+                document.getElementById('noFacesMessage').style.display = 'block';
+                return;
+            }
+
+            let offset = 4;
+            let knownCount = 0;
+            let unknownCount = 0;
+
+            for (let i = 0; i < numFaces; i++) {
+                const view = new DataView(payload.buffer, payload.byteOffset + offset, 28);
+                const x1 = view.getInt16(0, true);
+                const y1 = view.getInt16(2, true);
+                const x2 = view.getInt16(4, true);
+                const y2 = view.getInt16(6, true);
+                const userId = view.getInt16(8, true);
+                const confidence = view.getUint16(10, true) / 1000.0; // Fixed: uint16 divided by 1000
+
+                // Read user name (16 bytes starting at offset 12)
+                const nameBytes = payload.slice(offset + 12, offset + 28);
+                // Find first null byte to properly terminate string
+                let nameLength = 0;
+                for (let j = 0; j < nameBytes.length; j++) {
+                    if (nameBytes[j] === 0) break;
+                    nameLength++;
+                }
+                const userName = new TextDecoder().decode(nameBytes.slice(0, nameLength)).trim();
+
+                currentFaces.push({
+                    bbox: { x1, y1, x2, y2 },
+                    user_id: userId,
+                    user_name: userName || 'Unknown',
+                    confidence
+                });
+
+                if (userId >= 0) knownCount++;
+                else unknownCount++;
+
+                offset += 28;
+            }
+
+            document.getElementById('totalFaces').textContent = numFaces;
+            document.getElementById('knownFaces').textContent = knownCount;
+            document.getElementById('unknownFaces').textContent = unknownCount;
+            document.getElementById('faceListContainer').classList.remove('hidden');
+            document.getElementById('noFacesMessage').style.display = 'none';
+
+            updateFaceList();
+        }
+
+        function updateFaceList() {
+            const faceList = document.getElementById('faceList');
+            faceList.innerHTML = '';
+
+            currentFaces.forEach((face) => {
+                const item = document.createElement('div');
+                item.className = `face-item ${face.user_id < 0 ? 'unknown' : ''}`;
+
+                const name = document.createElement('div');
+                name.className = 'face-name';
+                name.textContent = face.user_name;
+
+                const confidence = document.createElement('div');
+                confidence.className = 'face-confidence';
+                confidence.textContent = `${(face.confidence * 100).toFixed(1)}%`;
+
+                item.appendChild(name);
+                item.appendChild(confidence);
+                faceList.appendChild(item);
+            });
+        }
+
+        // ===== ENROLLMENT PROGRESS =====
+        function parseEnrollmentProgress(payload) {
+            enrollmentProgress.state = payload[0];
+            enrollmentProgress.current_pose = payload[1];
+            enrollmentProgress.total_poses = payload[2];
+            enrollmentProgress.progress_percent = payload[3];
+            enrollmentProgress.pose_progress = Array.from(payload.slice(4, 9));
+
+            const nameBytes = payload.slice(9, 25);
+            enrollmentProgress.user_name = new TextDecoder().decode(nameBytes).replace(/\0/g, '').trim();
+
+            // Debug: Log pose information
+            const poseNames = ['Up', 'Down', 'Left', 'Right', 'Center'];
+            console.log(`Current Pose Index: ${enrollmentProgress.current_pose} (${poseNames[enrollmentProgress.current_pose] || 'Unknown'})`);
+            console.log(`Pose Progress: ${enrollmentProgress.pose_progress}`);
+
+            updateEnrollmentUI();
+
+            const stateNames = ['None', 'Waiting for Face', 'Collecting Poses', 'Completing', 'Completed'];
+            const stateName = stateNames[enrollmentProgress.state] || 'Unknown';
+            log(`Enrollment: ${stateName} | ${enrollmentProgress.progress_percent}% | Pose: ${poseNames[enrollmentProgress.current_pose] || 'Unknown'}`, 'info');
+        }
+
+        function updateEnrollmentUI() {
+            const stateNames = ['', 'Waiting for Face', 'Collecting Poses', 'Completing', 'Completed'];
+            document.getElementById('enrollmentState').textContent = stateNames[enrollmentProgress.state] || 'ENROLLMENT';
+            document.getElementById('enrollmentUser').textContent = enrollmentProgress.user_name;
+            document.getElementById('enrollmentProgress').style.width = `${enrollmentProgress.progress_percent}%`;
+            document.getElementById('enrollmentPercent').textContent = `${enrollmentProgress.progress_percent}%`;
+
+            const poseItems = document.getElementById('poseIndicators').children;
+            let completedPoses = 0;
+            for (let i = 0; i < 5; i++) {
+                const circle = poseItems[i].querySelector('.pose-circle');
+                circle.className = 'pose-circle';
+                const progress = enrollmentProgress.pose_progress[i];
+
+                // Highlight the current pose being captured
+                if (i === enrollmentProgress.current_pose && enrollmentProgress.state === 2 && progress < 100) {
+                    circle.classList.add('current-pose');
+                }
+
+                if (progress === 100) {
+                    circle.classList.add('completed');
+                    completedPoses++;
+                } else if (progress > 0) {
+                    circle.classList.add('in-progress');
+                }
+            }
+
+            // Show "Complete Now" button if 3 or more poses are recognized
+            const completeBtn = document.getElementById('completeEnrollmentBtn');
+            if (completedPoses >= 3 && enrollmentProgress.state === 2) {
+                completeBtn.classList.remove('hidden');
+            } else {
+                completeBtn.classList.add('hidden');
+            }
+        }
+
+        function completeEnrollment() {
+            log(`✓ Enrollment completed! User: ${enrollmentProgress.user_name}`, 'success');
+            setTimeout(() => {
+                isEnrolling = false;
+                enrollmentOverlay.classList.remove('active');
+                cancelEnrollBtn.classList.add('hidden');
+                enrollBtn.classList.remove('hidden');
+            }, 3000);
+        }
+
+        // ===== STATISTICS =====
+        function updateStats() {
+            document.getElementById('totalFrames').textContent = frameCount;
+            document.getElementById('crcErrors').textContent = errorCount;
+
+            const errorRate = frameCount > 0 ? (errorCount / frameCount * 100) : 0;
+            document.getElementById('errorRate').textContent = errorRate.toFixed(1);
+
+            const totalMB = (totalBytes / 1024 / 1024).toFixed(2);
+            document.getElementById('totalData').textContent = totalMB;
+        }
+
+        function updateFPS() {
+            if (!startTime) return;
+
+            const now = Date.now();
+
+            // Initialize last FPS calc time if needed
+            if (!lastFPSCalcTime) {
+                lastFPSCalcTime = now;
+                recentFrameCount = 0;
+            }
+
+            recentFrameCount++;
+
+            // Update FPS display every 200ms for responsive updates
+            if (now - lastFPSUpdateTime >= FPS_UPDATE_INTERVAL) {
+                const timeDelta = (now - lastFPSCalcTime) / 1000;
+                if (timeDelta > 0) {
+                    // Calculate instantaneous FPS (frames in recent time window)
+                    const instantFPS = recentFrameCount / timeDelta;
+
+                    // Update display with instant FPS
+                    document.getElementById('fpsDisplay').textContent = instantFPS.toFixed(1);
+
+                    // Calculate average FPS since start
+                    const elapsed = (now - startTime) / 1000;
+                    const avgFPS = frameCount / elapsed;
+                    document.getElementById('fpsAvgDisplay').textContent = avgFPS.toFixed(1);
+
+                    // Calculate instantaneous throughput
+                    const throughput = (totalBytes / elapsed / 1024).toFixed(1);
+                    document.getElementById('throughputDisplay').textContent = throughput;
+
+                    lastFPSUpdateTime = now;
+                }
+            }
+
+            // Update graphs every 1 second to show visible trends
+            if (now - lastGraphUpdateTime >= GRAPH_UPDATE_INTERVAL) {
+                const timeDelta = (now - lastFPSCalcTime) / 1000;
+                if (timeDelta > 0) {
+                    // Calculate FPS for this time window
+                    const instantFPS = recentFrameCount / timeDelta;
+
+                    // Add to graph buffers
+                    fpsBuffer.push(instantFPS);
+                    if (fpsBuffer.length > 60) fpsBuffer.shift();
+
+                    const elapsed = (now - startTime) / 1000;
+                    const throughput = parseFloat((totalBytes / elapsed / 1024).toFixed(1));
+                    throughputBuffer.push(throughput);
+                    if (throughputBuffer.length > 60) throughputBuffer.shift();
+
+                    // Reset for next calculation window
+                    lastFPSCalcTime = now;
+                    recentFrameCount = 0;
+                    lastGraphUpdateTime = now;
+
+                    updateGraphs();
+                }
+            }
+        }
+
+        function updateStatus(text, connected, streaming) {
+            document.getElementById('statusText').textContent = text;
+            const indicator = document.getElementById('statusIndicator');
+
+            indicator.className = 'status-indicator';
+            if (streaming) {
+                indicator.classList.add('streaming');
+            } else if (connected) {
+                indicator.classList.add('connected');
+            }
+        }
+
+        // ===== GRAPHS =====
+        let fpsGraphData = [];
+        let throughputGraphData = [];
+        let fpsGraphCtx, throughputGraphCtx;
+
+        function initGraphs() {
+            const fpsCanvas = document.getElementById('fpsGraph');
+            const throughputCanvas = document.getElementById('throughputGraph');
+
+            fpsGraphCtx = fpsCanvas.getContext('2d');
+            throughputGraphCtx = throughputCanvas.getContext('2d');
+        }
+
+        function updateGraphs() {
+            const currentFPS = parseFloat(document.getElementById('fpsDisplay').textContent);
+            const currentThroughput = parseFloat(document.getElementById('throughputDisplay').textContent);
+
+            fpsGraphData.push(currentFPS);
+            throughputGraphData.push(currentThroughput);
+
+            if (fpsGraphData.length > 60) fpsGraphData.shift();
+            if (throughputGraphData.length > 60) throughputGraphData.shift();
+
+            drawGraph(fpsGraphCtx, fpsGraphData, '#9BBA43', 12);
+            drawGraph(throughputGraphCtx, throughputGraphData, '#3B9B91', 100);
+        }
+
+        function drawGraph(ctx, data, color, maxValue) {
+            const canvas = ctx.canvas;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (data.length < 2) return;
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const step = width / (data.length - 1);
+
+            data.forEach((value, index) => {
+                const x = index * step;
+                const y = height - (value / maxValue * height);
+
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.stroke();
+
+            // Fill area under curve
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.closePath();
+            ctx.fillStyle = color + '20';
+            ctx.fill();
+        }
+
+        // ===== CRC16 =====
+        function crc16(data) {
+            let crc = 0xFFFF;
+            for (let i = 0; i < data.length; i++) {
+                crc ^= data[i];
+                for (let j = 0; j < 8; j++) {
+                    if (crc & 0x0001) {
+                        crc = (crc >> 1) ^ 0xA001;
+                    } else {
+                        crc >>= 1;
+                    }
+                }
+            }
+            return crc;
+        }
+
+        // ===== INITIALIZATION (after DOM loads) =====
+        function initializeApp() {
+            // Get DOM elements
+            connectBtn = document.getElementById('connectBtn');
+            startStreamBtn = document.getElementById('startStreamBtn');
+            stopStreamBtn = document.getElementById('stopStreamBtn');
+            enrollBtn = document.getElementById('enrollBtn');
+            cancelEnrollBtn = document.getElementById('cancelEnrollBtn');
+            clearUsersBtn = document.getElementById('clearUsersBtn');
+
+            canvas = document.getElementById('videoCanvas');
+            ctx = canvas.getContext('2d');
+
+            enrollmentOverlay = document.getElementById('enrollmentOverlay');
+
+            // Initial logging
+            log('═══════════════════════════════════════════════', 'info');
+            log('PSOC™ Edge E84 Face ID System Monitor', 'success');
+            log('═══════════════════════════════════════════════', 'info');
+            log('WebSerial API initialized and ready', 'info');
+            log('Click "Connect Device" to begin...', 'info');
+
+            // Disable enrollment buttons initially
+            enrollBtn.disabled = true;
+            clearUsersBtn.disabled = true;
+
+            // Initialize graphs
+            initGraphs();
+
+            // Setup event listeners
+            setupEventListeners();
+        }
+
+        // ===== EVENT LISTENERS =====
+        function setupEventListeners() {
+            connectBtn.addEventListener('click', async () => {
+                if (port) {
+                    await disconnectFromDevice();
+                } else {
+                    await connectToDevice();
+                }
+            });
+
+            startStreamBtn.addEventListener('click', startStreaming);
+            stopStreamBtn.addEventListener('click', stopStreaming);
+            enrollBtn.addEventListener('click', startEnrollment);
+            cancelEnrollBtn.addEventListener('click', cancelEnrollment);
+            clearUsersBtn.addEventListener('click', clearAllUsers);
+
+            // Enrollment overlay buttons
+            document.getElementById('cancelEnrollmentBtn').addEventListener('click', cancelEnrollment);
+            document.getElementById('completeEnrollmentBtn').addEventListener('click', forceCompleteEnrollment);
+
+            // Quality control buttons
+            document.querySelectorAll('.btn[data-quality]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const quality = parseInt(btn.dataset.quality);
+                    setJPEGQuality(quality);
+                });
+            });
+
+            // Scale controls
+            document.querySelectorAll('.scale-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const scale = btn.dataset.scale;
+
+                    document.querySelectorAll('.scale-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    canvas.style.width = scale === '1x' ? '320px' : scale === '2x' ? '640px' : '100%';
+                    canvas.style.height = 'auto';
+
+                    log(`Video scale changed to ${scale}`, 'info');
+                });
+            });
+        }
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+    </script>
+</body>
+</html>
