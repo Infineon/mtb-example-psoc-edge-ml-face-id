@@ -87,8 +87,9 @@ static cy_stc_smif_mem_context_t smif_mem_context;
 static cy_stc_smif_mem_info_t smif_mem_info;
 static mtb_hal_rtc_t rtc_obj;
 mtb_hal_rtc_t         rtc;
+#ifndef USE_KIT_PSE84_HMI
 static TaskHandle_t uart_cmd_thread;
-
+#endif /* USE_KIT_PSE84_HMI */
 void cm55_ns_gfx_task(void *arg);
 void cm55_usb_webcam_task(void *arg);
 
@@ -305,6 +306,7 @@ int main(void)
         CY_ASSERT(0);
     }
 
+#ifndef USE_KIT_PSE84_HMI
     xReturned =  xTaskCreate(OOB_UartCMD_Task, "UART_CMD",
                             UART_CMD_TASK_STACK_SIZE,
                             NULL, OOB_UART_TASK_PRIORITY,
@@ -314,6 +316,7 @@ int main(void)
             printf("[MAIN] Creating OOB Uart Task failed\n");
             CY_ASSERT(0);
         }
+#endif /* USE_KIT_PSE84_HMI */
 
     /* Start the RTOS Scheduler */
     vTaskStartScheduler();

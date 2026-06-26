@@ -65,7 +65,11 @@ PLOT_ALIGNED_FACES=
 TEST_SAVED_IMAGE=
 
 # Set to "true" to use bigger font for bounding box labels
+ifeq (APP_KIT_PSE84_HMI, $(TARGET))
+USE_BIGGER_FONT=false
+else
 USE_BIGGER_FONT=true
+endif
 
 # Set to "true" to show model inferencing time instead of FPS
 SHOW_INFERENCING_TIME=true
@@ -186,6 +190,21 @@ ifeq ($(ENABLE_WEB_STREAMING),true)
     DEFINES+=ENABLE_WEB_STREAMING
 endif
 endif
+
+# HMI kit uses ST7701S display (512x480) with USB camera
+ifeq (APP_KIT_PSE84_HMI, $(TARGET))
+DEFINES+=USE_KIT_PSE84_HMI
+# Ignore unused 4.3-inch display and touch driver files from compilation
+CY_IGNORE += $(SEARCH_display-dsi-waveshare-4-3-lcd)
+CY_IGNORE += $(SEARCH_touch-ctp-ft5406)
+# HMI kit has no CYBSP_TENXER_UART and no web streaming: exclude UART command module
+CY_IGNORE += oob_uart_cmd.c
+else
+# Ignore unused 4-inch display and touch driver files from compilation
+CY_IGNORE += $(SEARCH_display-tft-st7701s)
+CY_IGNORE += $(SEARCH_touch-ctp-ft5446)
+endif
+
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT+=hardfp
 

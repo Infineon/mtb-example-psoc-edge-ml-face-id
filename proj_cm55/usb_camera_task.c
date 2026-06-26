@@ -139,6 +139,7 @@ static void _cbOnAddRemoveDevice ( void *pContext, U8 DevIndex, USBH_DEVICE_EVEN
         break;
 
     case USBH_DEVICE_EVENT_REMOVE :
+    {
         _device_connected = USB_DEVICE_DISCONNECTED;
         USBH_Logf_Application("**** VIDEO Device removed [%d]\n", DevIndex);
 
@@ -156,6 +157,7 @@ static void _cbOnAddRemoveDevice ( void *pContext, U8 DevIndex, USBH_DEVICE_EVEN
 
         _StreamErrCnt = RESET_VALUE_INDEX;
         break;
+    }
 
     default :
         ; /* Should never happen */

@@ -48,7 +48,13 @@ extern "C" {
 #include "vg_lite.h"
 #include "vg_lite_platform.h"
 #include "ifx_face_id.h"
+#if defined(USE_KIT_PSE84_HMI)
+#include "mtb_display_st7701s.h"
+#include "mtb_ctp_ft5446.h"
+#else
 #include "mtb_disp_dsi_waveshare_4p3.h"
+#include "mtb_ctp_ft5406.h"
+#endif
 #include "oob_uart_cmd.h"
 
 /*******************************************************************************
@@ -63,10 +69,29 @@ extern "C" {
 #define BITS_PER_PIXEL                      (8U)
 #define VG_PARAMS_POS                       (0UL)
 
+/* Display I2C controller */
+#if defined(USE_KIT_PSE84_AI) || defined(USE_KIT_PSE84_HMI)
+#define DISPLAY_I2C_CONTROLLER_HW     CYBSP_I2C_DISPLAY_CONTROLLER_HW
+#define DISPLAY_I2C_CONTROLLER_IRQ    CYBSP_I2C_DISPLAY_CONTROLLER_IRQ
+#define DISPLAY_I2C_CONTROLLER_config CYBSP_I2C_DISPLAY_CONTROLLER_config
+#else
+#define DISPLAY_I2C_CONTROLLER_HW     CYBSP_I2C_CONTROLLER_HW
+#define DISPLAY_I2C_CONTROLLER_IRQ    CYBSP_I2C_CONTROLLER_IRQ
+#define DISPLAY_I2C_CONTROLLER_config CYBSP_I2C_CONTROLLER_config
+#endif
+
+#if defined(USE_KIT_PSE84_HMI)
+#define DISPLAY_W                       (512U)
+#define DISPLAY_H                       (480U)
+#else
+#define DISPLAY_W                       (MTB_DISP_WAVESHARE_4P3_HOR_RES)
+#define DISPLAY_H                       (MTB_DISP_WAVESHARE_4P3_VER_RES)
+#endif
+
 /* 64 KB */
 #define DEFAULT_GPU_CMD_BUFFER_SIZE         ((64U) * (1024U))
-#define GPU_TESSELLATION_BUFFER_SIZE        ((MTB_DISP_WAVESHARE_4P3_VER_RES) * 128U)
-#define FRAME_BUFFER_SIZE                   ((MTB_DISP_WAVESHARE_4P3_HOR_RES) * (MTB_DISP_WAVESHARE_4P3_VER_RES) * ((COLOR_DEPTH) / (BITS_PER_PIXEL)))
+#define GPU_TESSELLATION_BUFFER_SIZE        ((DISPLAY_H) * 128U)
+#define FRAME_BUFFER_SIZE                   ((DISPLAY_W) * (DISPLAY_H) * ((COLOR_DEPTH) / (BITS_PER_PIXEL)))
 #define VGLITE_HEAP_SIZE                    (((FRAME_BUFFER_SIZE) * (3)) + \
                                              (((DEFAULT_GPU_CMD_BUFFER_SIZE) + (GPU_TESSELLATION_BUFFER_SIZE)) * (NUM_IMAGE_BUFFERS)) + \
                                              ((CAMERA_BUFFER_SIZE) * (NUM_IMAGE_BUFFERS + 1)))

@@ -68,12 +68,6 @@
 *******************************************************************************/
 cy_stc_scb_uart_context_t MODBUS_UART_context;
 bool boReadUARTData;
-bool fid_home_start_enrollment_flag = false;
-bool fid_home_cancel_enrollment_flag = false;
-#ifdef ENABLE_WEB_STREAMING
-bool fid_home_complete_enrollment_flag = false;
-#endif
-bool fid_home_clear_enrolled_users_flag = false;
 /* The application should set this to the active app context (0x01..0x05). */
 volatile uint8_t g_oob_current_app_id = OOB_APP_FACE_ID; /* default application */
 

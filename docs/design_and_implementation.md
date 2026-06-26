@@ -5,6 +5,7 @@
 This code example supports following display and cameras:
 
 - **[Waveshare 4.3-inch Raspberry Pi DSI LCD Display](https://www.waveshare.com/4.3inch-dsi-lcd.htm):** The LCD houses a Chipone ICN6211 display controller and uses the MIPI DSI interface
+- **[ST7701S 4-inch MIPI DSI display driver](https://www.rocktech.com.hk/lcd-product/rk040hf001):** The TFT LCD houses a ST7701S display controller and uses the MIPI DSI interface. This display by default shipped with the KIT_PSE84_HMI
 - **[HBVCAM OV7675 0.3MP Camera](https://www.hbvcamera.com/0-3mp-pixel-usb-cameras/hbvcam-ov7675-0.3mp-mini-laptop-camera-module.html)**
 - **[HBVCAM OS02F10 2MP Camera](https://www.hbvcamera.com/2-mega-pixel-usb-cameras/2mp-1080p-auto-focus-hd-usb-camera-module-for-atm-machine.html)**
 - **[Logitech C920 HD Pro Webcam](https://www.logitech.com/en-ch/shop/p/c920-pro-hd-webcam)**

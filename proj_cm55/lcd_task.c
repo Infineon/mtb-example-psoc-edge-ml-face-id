@@ -52,7 +52,6 @@
 #include "usb_camera_task.h"
 #include "lcd_task.h"
 #include "vg_lite.h"
-#include "mtb_ctp_ft5406.h"
 #include "start_face_enrolment_btn_img.h"
 #include "save_face_enrolment_btn_img.h"
 #include "cancel_released_btn_img.h"
@@ -87,6 +86,8 @@ extern bool is_streaming_active(void);  /* Check if UART streaming is active */
 /*******************************************************************************
 * Macros
 *******************************************************************************/
+#define I2C_DELAY_MS      (200)
+
 #ifdef TEST_SAVED_IMAGE
 #include "one_detection.h"   /* Contains static uint8_t test_image_array[size] */
 #define ONE_DETECTION_WIDTH  NUM_ONE_DETECTION_WIDTH    /* Your test image width */
@@ -94,47 +95,49 @@ extern bool is_streaming_active(void);  /* Check if UART streaming is active */
 #define ONE_DETECTION_SIZE   (ONE_DETECTION_WIDTH * ONE_DETECTION_HEIGHT * NUM_ONE_DETECTION_SIZE_MULTIPLIER)
 #endif
 
-/* Display I2C controller */
-#ifdef USE_KIT_PSE84_AI
-#define DISPLAY_I2C_CONTROLLER_HW     CYBSP_I2C_DISPLAY_CONTROLLER_HW
-#define DISPLAY_I2C_CONTROLLER_IRQ    CYBSP_I2C_DISPLAY_CONTROLLER_IRQ
-#define DISPLAY_I2C_CONTROLLER_config CYBSP_I2C_DISPLAY_CONTROLLER_config
-#else
-#define DISPLAY_I2C_CONTROLLER_HW     CYBSP_I2C_CONTROLLER_HW
-#define DISPLAY_I2C_CONTROLLER_IRQ    CYBSP_I2C_CONTROLLER_IRQ
-#define DISPLAY_I2C_CONTROLLER_config CYBSP_I2C_CONTROLLER_config
-#endif
-
-#define HOME_BTN_X_POS                 (MTB_DISP_WAVESHARE_4P3_HOR_RES \
+#define HOME_BTN_X_POS                 (DISPLAY_W \
                                             - HOME_BUTTON_IMG_WIDTH - HOME_BTN_OFFSET)
 #define HOME_BTN_Y_POS                 (LCD_TEXT_TOP_MARGIN)
 #define FACE_ENROL_BTN_X_POS           (FACE_ENROL_BTN_OFFSET)
-#define FACE_ENROL_BTN_Y_POS           ((MTB_DISP_WAVESHARE_4P3_VER_RES / NUM_DISPLAY_DIVISOR_3) + FACE_ENROL_BTN_Y_OFFSET)
+#define FACE_ENROL_BTN_Y_POS           ((DISPLAY_H / NUM_DISPLAY_DIVISOR_3) + FACE_ENROL_BTN_Y_OFFSET)
 #define CANCEL_BTN_X_POS               (FACE_ENROL_BTN_OFFSET)
 #define CANCEL_BTN_Y_POS               (FACE_ENROL_BTN_Y_POS + CANCEL_BTN_Y_OFFSET + FACE_ENROL_BTN_Y_OFFSET)
 #define CLEAR_BTN_X_POS                (FACE_ENROL_BTN_OFFSET)
 #define CLEAR_BTN_Y_POS                (CANCEL_BTN_Y_POS + CLEAR_BTN_Y_OFFSET + FACE_ENROL_BTN_Y_OFFSET)
-#define NO_CAMERA_IMG_X_POS            ((MTB_DISP_WAVESHARE_4P3_HOR_RES / 2U) \
+#define NO_CAMERA_IMG_X_POS            ((DISPLAY_W / 2U) \
                                             - ((NO_CAMERA_IMG_WIDTH / 2U) + NO_CAMERA_IMG_OFFSET))
-#define NO_CAMERA_IMG_Y_POS            ((MTB_DISP_WAVESHARE_4P3_VER_RES / 2U) \
+#define NO_CAMERA_IMG_Y_POS            ((DISPLAY_H / 2U) \
                                             - (NO_CAMERA_IMG_HEIGHT / 2U))
-#define CAMERA_NOT_SUPPORTED_IMG_X_POS ((MTB_DISP_WAVESHARE_4P3_HOR_RES / 2U) \
+#define CAMERA_NOT_SUPPORTED_IMG_X_POS ((DISPLAY_W / 2U) \
                                             - ((CAMERA_NOT_SUPPORTED_IMG_WIDTH / 2U) + CAMERA_NOT_SUPPORTED_IMG_OFFSET))
-#define CAMERA_NOT_SUPPORTED_IMG_Y_POS ((MTB_DISP_WAVESHARE_4P3_VER_RES / 2U) \
+#define CAMERA_NOT_SUPPORTED_IMG_Y_POS ((DISPLAY_H / 2U) \
                                             - (CAMERA_NOT_SUPPORTED_IMG_HEIGHT / 2U))
-#define FPS_TXT_Y_POS                  (MTB_DISP_WAVESHARE_4P3_VER_RES - FPS_TXT_Y_OFFSET)
-
-#define DISPLAY_W                       (MTB_DISP_WAVESHARE_4P3_HOR_RES)
-#define DISPLAY_H                       (MTB_DISP_WAVESHARE_4P3_VER_RES)
-
+#define FPS_TXT_Y_POS                  (DISPLAY_H - FPS_TXT_Y_OFFSET)
 #define PLOT_ALIGNED_X                  (NUM_PLOT_ALIGNED_X)
 #define PLOT_ALIGNED_Y                  (NUM_PLOT_ALIGNED_Y)
+
+#ifdef USE_KIT_PSE84_HMI
+#define ROTATE_ANGLE                    (90.0f)
+#define ROTATE_MATRIX_X                 (240)
+#define ROTATE_MATRIX_Y                 (240)
+#define FLIP_MATRIX_X                   (1.0f)
+#define FLIP_MATRIX_Y                   (1.0f)
+#define HMI_BBOX_ROTATION_OFFSET_X      (70)
+#endif
 
 /*******************************************************************************
 * Global Variables
 *******************************************************************************/
 vg_lite_buffer_t    *renderTarget; /* used by lcd_bsp.c */
 vg_lite_buffer_t    usb_yuv_frames[NUM_IMAGE_BUFFERS]; /* used by usb_camera_task.c */
+
+/* UART command flags set by oob_uart_cmd.c (non-HMI) or touch buttons (all targets) */
+bool fid_home_start_enrollment_flag = false;
+bool fid_home_cancel_enrollment_flag = false;
+bool fid_home_clear_enrolled_users_flag = false;
+#ifdef ENABLE_WEB_STREAMING
+bool fid_home_complete_enrollment_flag = false;
+#endif
 
 cy_stc_scb_i2c_context_t disp_i2c_controller_context;
 vg_lite_buffer_t home_button_buffer;
@@ -162,6 +165,13 @@ static uint8_t Image_buf_bgr565[CAMERA_BUFFER_SIZE] = {RESET_VALUE_INDEX};
 CY_SECTION(".cy_socmem_data")
 __attribute__((aligned(64)))
 static uint8_t  Image_buf_bgr888[(IMAGE_HEIGHT) * (IMAGE_WIDTH) * RGB888_BYTES_PER_PIXEL] = {RESET_VALUE_INDEX};
+
+#ifdef USE_KIT_PSE84_HMI
+/* Rotated BGR565 buffer: 90 CW rotation swaps dimensions to CAMERA_HEIGHT x CAMERA_WIDTH */
+CY_SECTION(".cy_socmem_data")
+__attribute__((aligned(64)))
+static uint8_t Image_buf_bgr565_rotated[CAMERA_BUFFER_SIZE] = {RESET_VALUE_INDEX};
+#endif /* USE_KIT_PSE84_HMI */
 
 /* scale factor from the camera image to the display */
 static float    scale_Cam2Disp;
@@ -230,11 +240,34 @@ const cy_stc_sysint_t i2c_controller_irq_cfg =
         .intrPriority = I2C_CONTROLLER_IRQ_PRIORITY,
 };
 
+#if defined(USE_KIT_PSE84_HMI)
+mtb_display_st7701s_backlight_config_t st7701s_backlight_cfg =
+{
+    .bl_port    = CYBSP_DISP_BACKLIGHT_PWM_PORT,
+    .bl_pin     = CYBSP_DISP_BACKLIGHT_PWM_PIN,
+    .pwm_hw     = CYBSP_PWM_DISP_BACKLIGHT_HW,
+    .pwm_num    = CYBSP_PWM_DISP_BACKLIGHT_NUM,
+    .pwm_config = &CYBSP_PWM_DISP_BACKLIGHT_config
+};
+
+mtb_ctp_ft5446_config_t ctp_ft5446_config =
+{
+    .scb_instance     = CYBSP_I2C_DISPLAY_CONTROLLER_HW,
+    .i2c_context      = &disp_i2c_controller_context,
+    .rst_port         = CYBSP_DISP_TP_RST_PORT,
+    .rst_pin          = CYBSP_DISP_TP_RST_PIN,
+    .irq_port         = CYBSP_DISP_TP_INT_PORT,
+    .irq_pin          = CYBSP_DISP_TP_INT_PIN,
+    .irq_num          = CYBSP_DISP_TP_INT_IRQ,
+    .touch_event      = false
+};
+#else
 mtb_ctp_ft5406_config_t ft5406_config =
 {
         .i2c_base    = DISPLAY_I2C_CONTROLLER_HW,
         .i2c_context = &disp_i2c_controller_context
 };
+#endif
 
 touch_button_event_t touch_button_event[BUTTON_ID_MAX];
 
@@ -296,6 +329,40 @@ static void mirrorImage(vg_lite_buffer_t *buffer)
         }
     }
 }
+
+#ifdef USE_KIT_PSE84_HMI
+/********************************************************************************
+* Function Name: rotate_frame
+*********************************************************************************
+* Summary:
+*  Rotates a BGR565 frame/image 90 degrees clockwise and writes the result to a
+*  destination buffer. The source dimensions are CAMERA_WIDTH x CAMERA_HEIGHT
+*  and the destination has swapped dimensions CAMERA_HEIGHT x CAMERA_WIDTH.
+*
+* Parameters:
+*  const uint8_t *src: Pointer to the source BGR565 image buffer
+*  uint8_t *dst:       Pointer to the destination BGR565 image buffer
+*
+* Return:
+*  void
+*
+********************************************************************************/
+static void rotate_frame(const uint8_t *src, uint8_t *dst)
+{
+    const uint16_t *src16 = (const uint16_t *)src;
+    uint16_t *dst16 = (uint16_t *)dst;
+
+    /* 90 CW: dst[new_y][new_x] = src[CAMERA_HEIGHT-1-new_x][new_y]
+    * Output width = CAMERA_HEIGHT, output height = CAMERA_WIDTH */
+    for (int new_y = 0; new_y < CAMERA_WIDTH; new_y++) {
+        for (int new_x = 0; new_x < CAMERA_HEIGHT; new_x++) {
+            int src_x = new_y;
+            int src_y = CAMERA_HEIGHT - 1 - new_x;
+            dst16[new_y * CAMERA_HEIGHT + new_x] = src16[src_y * CAMERA_WIDTH + src_x];
+        }
+    }
+}
+#endif /* USE_KIT_PSE84_HMI */
 
 
 /*******************************************************************************
@@ -559,6 +626,26 @@ static void plot_aligned_faces_bottom()
 
 
 /********************************************************************************
+* Function Name: i2c_controller_interrupt
+*********************************************************************************
+* Summary:
+*  I2C controller ISR which invokes Cy_SCB_I2C_Interrupt to perform I2C transfer
+*  as controller.
+*
+* Parameters:
+*  void
+*
+* Return:
+*  void
+*
+********************************************************************************/
+static void i2c_controller_interrupt(void)
+{
+    Cy_SCB_I2C_Interrupt(DISPLAY_I2C_CONTROLLER_HW, &disp_i2c_controller_context);
+}
+
+
+/********************************************************************************
 * Function Name: touch_read_timer_cb
 *********************************************************************************
 * Summary:
@@ -577,17 +664,26 @@ static void plot_aligned_faces_bottom()
 ********************************************************************************/
 static void touch_read_timer_cb(TimerHandle_t xTimer)
 {
+    #if defined(USE_KIT_PSE84_HMI)
+    cy_rslt_t result;
+    #else
     cy_en_scb_i2c_status_t i2c_status = CY_SCB_I2C_SUCCESS;
+    mtb_ctp_touch_event_t touch_event = MTB_CTP_TOUCH_UP;
+    #endif
     static int touch_x = RESET_VALUE_INDEX;
     static int touch_y = RESET_VALUE_INDEX;
     volatile int x_val = RESET_VALUE_INDEX;
     volatile int y_val = RESET_VALUE_INDEX;
-    mtb_ctp_touch_event_t touch_event = MTB_CTP_TOUCH_UP;
 
+    #if defined(USE_KIT_PSE84_HMI)
+    result = mtb_ctp_ft5446_get_single_touch(&touch_x, &touch_y);
+    if ((CY_RSLT_SUCCESS == result) || button_debouncing)
+    #else
     i2c_status = mtb_ctp_ft5406_get_single_touch(&touch_event, &touch_x, &touch_y);
 
     if ((CY_SCB_I2C_SUCCESS == i2c_status) &&
             ((MTB_CTP_TOUCH_DOWN == touch_event) || (MTB_CTP_TOUCH_CONTACT == touch_event)))
+    #endif
     {
         if (!button_debouncing)
         {
@@ -601,13 +697,17 @@ static void touch_read_timer_cb(TimerHandle_t xTimer)
         if (button_debouncing && ((xTaskGetTickCount() - button_debounce_timestamp) >= pdMS_TO_TICKS(DEBOUNCE_TIME_MS)))
         {
             button_debouncing = false;
+            #if defined(USE_KIT_PSE84_HMI)
+            x_val = touch_x;
+            y_val = touch_y;
+            #else
             x_val = ((ifx_lcd_get_Display_Width() - NUM_LOOP_INCREMENT_1) - NUM_DISPLAY_OFFSET_32) - touch_x;
             y_val = (ifx_lcd_get_Display_Height() - NUM_LOOP_INCREMENT_1) - touch_y;
-
+            #endif
 
             /* Start/Save Face Enrolment Button */
-            if (_device_connected && (x_val >= (FACE_ENROL_BTN_X_POS - NUM_TOUCH_OFFSET_10)) && (x_val <= (FACE_ENROL_BTN_X_POS + START_FACE_ENROLMENT_BUTTON_WIDTH)) &&
-                    (y_val >= (FACE_ENROL_BTN_Y_POS - NUM_TOUCH_OFFSET_10)) && (y_val <= (FACE_ENROL_BTN_Y_POS + START_FACE_ENROLMENT_BUTTON_HEIGHT)))
+            if (_device_connected && (x_val >= (int)(FACE_ENROL_BTN_X_POS - NUM_TOUCH_OFFSET_10)) && (x_val <= (int)(FACE_ENROL_BTN_X_POS + START_FACE_ENROLMENT_BUTTON_WIDTH)) &&
+                    (y_val >= (int)(FACE_ENROL_BTN_Y_POS - NUM_TOUCH_OFFSET_10)) && (y_val <= (int)(FACE_ENROL_BTN_Y_POS + START_FACE_ENROLMENT_BUTTON_HEIGHT)))
             {
                 switch (touch_button_event[FACE_ENROL_BUTTON_ID].event)
                 {
@@ -625,15 +725,15 @@ static void touch_read_timer_cb(TimerHandle_t xTimer)
                 }
             }
             /* Cancel Face Enrolment Button */
-            else if (_device_connected && (x_val >= (CANCEL_BTN_X_POS - NUM_TOUCH_OFFSET_10)) && (x_val <= (CANCEL_BTN_X_POS + CANCEL_RELEASED_BUTTON_WIDTH)) &&
-                    (y_val >= (CANCEL_BTN_Y_POS - NUM_TOUCH_OFFSET_5)) && (y_val <= (CANCEL_BTN_Y_POS + CANCEL_RELEASED_BUTTON_HEIGHT)))
+            else if (_device_connected && (x_val >= (int)(CANCEL_BTN_X_POS - NUM_TOUCH_OFFSET_10)) && (x_val <= (int)(CANCEL_BTN_X_POS + CANCEL_RELEASED_BUTTON_WIDTH)) &&
+                    (y_val >= (int)(CANCEL_BTN_Y_POS - NUM_TOUCH_OFFSET_5)) && (y_val <= (int)(CANCEL_BTN_Y_POS + CANCEL_RELEASED_BUTTON_HEIGHT)))
             {
                 touch_button_event[CANCEL_ENROL_BUTTON_ID].event = TOUCH_BUTTON_EVENT_PRESSED;
                 touch_button_event[CANCEL_ENROL_BUTTON_ID].pressed = true;
             }
             /* Clear Enrolled Users Button */
-            else if (_device_connected && (x_val >= (CLEAR_BTN_X_POS - NUM_TOUCH_OFFSET_10)) && (x_val <= (CLEAR_BTN_X_POS + CLEAR_RELEASED_BUTTON_WIDTH)) &&
-                    (y_val >= (CLEAR_BTN_Y_POS - NUM_TOUCH_OFFSET_5)) && (y_val <= (CLEAR_BTN_Y_POS + CLEAR_RELEASED_BUTTON_HEIGHT)))
+            else if (_device_connected && (x_val >= (int)(CLEAR_BTN_X_POS - NUM_TOUCH_OFFSET_10)) && (x_val <= (int)(CLEAR_BTN_X_POS + CLEAR_RELEASED_BUTTON_WIDTH)) &&
+                    (y_val >= (int)(CLEAR_BTN_Y_POS - NUM_TOUCH_OFFSET_5)) && (y_val <= (int)(CLEAR_BTN_Y_POS + CLEAR_RELEASED_BUTTON_HEIGHT)))
             {
                 touch_button_event[CLEAR_ENROL_BUTTON_ID].event = TOUCH_BUTTON_EVENT_PRESSED;
                 touch_button_event[CLEAR_ENROL_BUTTON_ID].pressed = true;
@@ -663,6 +763,48 @@ static void touch_input_dev_init(void)
     cy_en_scb_i2c_status_t i2c_status = CY_SCB_I2C_SUCCESS;
     TimerHandle_t touch_timer_handle;
 
+    #if defined(USE_KIT_PSE84_HMI)
+    cy_en_sysint_status_t sysint_status = CY_SYSINT_SUCCESS;
+    cy_rslt_t result;
+
+    /* Initialize the I2C in controller mode. */
+    i2c_status = Cy_SCB_I2C_Init(DISPLAY_I2C_CONTROLLER_HW,
+            &DISPLAY_I2C_CONTROLLER_config, &disp_i2c_controller_context);
+
+    if (CY_SCB_I2C_SUCCESS != i2c_status)
+    {
+        printf("I2C controller initialization failed !!\r\n");
+        CY_ASSERT(NUM_CY_ASSERT_VALUE);
+    }
+
+    /* Initialize the I2C interrupt */
+    sysint_status = Cy_SysInt_Init(&i2c_controller_irq_cfg,
+            &i2c_controller_interrupt);
+
+    if (CY_SYSINT_SUCCESS != sysint_status)
+    {
+        printf("I2C controller interrupt initialization failed\r\n");
+        CY_ASSERT(NUM_CY_ASSERT_VALUE);
+    }
+
+    /* Enable the I2C interrupts. */
+    NVIC_EnableIRQ(i2c_controller_irq_cfg.intrSrc);
+
+    /* Enable the I2C */
+    Cy_SCB_I2C_Enable(DISPLAY_I2C_CONTROLLER_HW);
+
+    /* Allow I2C to be stabalized to initialize the display */
+    Cy_SysLib_Delay(I2C_DELAY_MS);
+
+    result = mtb_ctp_ft5446_init(&ctp_ft5446_config);
+
+    if (CY_RSLT_SUCCESS != result)
+    {
+        printf("[ERROR] Touch driver initialization failed: %d\r\n",  (unsigned int) result);
+        CY_ASSERT(NUM_CY_ASSERT_VALUE);
+    }
+
+    #else
     i2c_status = mtb_ctp_ft5406_init(&ft5406_config);
 
     if (CY_SCB_I2C_SUCCESS != i2c_status)
@@ -670,6 +812,7 @@ static void touch_input_dev_init(void)
         printf("[ERROR] Touch driver initialization failed: %d\r\n", i2c_status);
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
     }
+    #endif
 
     touch_timer_handle = xTimerCreate("touch_read_timer",
             pdMS_TO_TICKS(TOUCH_TIMER_PERIOD_MS),
@@ -686,26 +829,6 @@ static void touch_input_dev_init(void)
         printf("[ERROR] Touch read timer creation failed\r\n");
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
     }
-}
-
-
-/********************************************************************************
-* Function Name: i2c_controller_interrupt
-*********************************************************************************
-* Summary:
-*  I2C controller ISR which invokes Cy_SCB_I2C_Interrupt to perform I2C transfer
-*  as controller.
-*
-* Parameters:
-*  void
-*
-* Return:
-*  void
-*
-********************************************************************************/
-static void i2c_controller_interrupt(void)
-{
-    Cy_SCB_I2C_Interrupt(DISPLAY_I2C_CONTROLLER_HW, &disp_i2c_controller_context);
 }
 
 
@@ -1240,7 +1363,7 @@ static void update_enrollment_display(ifx_faceid_prediction_t *prediction,
         {
             /* Handle pose completion */
             ifx_lcd_set_FGcolor(0, 255, 0);  /* Bright green text */
-            if (current_pose >= 0 && current_pose < progress->num_poses) {
+            if ((uint32_t)current_pose < (uint32_t)progress->num_poses) {
                 ifx_lcd_printf(ALIGN_LEFT, 100, "EXCELLENT! %s POSE COMPLETED", progress->pose_names[current_pose]);
             } else {
                 ifx_lcd_printf(ALIGN_LEFT, 100, "EXCELLENT! POSE COMPLETED");
@@ -1394,9 +1517,16 @@ void update_lcd_display(ifx_faceid_prediction_t *prediction,
     {
         bbox = &prediction->bbox_int16[i << 2];
         id = prediction->id[i];
+        #ifdef USE_KIT_PSE84_HMI
+        /* HMI_BBOX_ROTATION_OFFSET_X corrects the horizontal bbox position after the
+        * 90 CW rotation applied to the camera image on the KIT_PSE84_HMI. */
+        xmin  = (int16_t)(bbox[0] * scale_Cam2Disp) + display_offset_x + HMI_BBOX_ROTATION_OFFSET_X;
+        xmax  = (int16_t)(bbox[2] * scale_Cam2Disp) + display_offset_x + HMI_BBOX_ROTATION_OFFSET_X;
+        #else
         xmin  = (int16_t)(bbox[0] * scale_Cam2Disp) + display_offset_x;
-        ymin  = (int16_t)(bbox[1] * scale_Cam2Disp) + display_offset_y;
         xmax  = (int16_t)(bbox[2] * scale_Cam2Disp) + display_offset_x;
+        #endif
+        ymin  = (int16_t)(bbox[1] * scale_Cam2Disp) + display_offset_y;
         ymax  = (int16_t)(bbox[3] * scale_Cam2Disp) + display_offset_y;
 
         xmin = min(max(xmin, 1), DISPLAY_W-1);
@@ -1822,15 +1952,23 @@ uint8_t * getInputImage()
 
     /* display 320x240 BGR565 image on LCD (scaled display BGR565) */
     float time_draw_3 = get_time_in_ms();
+#ifdef USE_KIT_PSE84_HMI
+    /* Rotate 90 CW so the AI model receives correctly oriented image.
+    * After rotation: width = CAMERA_HEIGHT, height = CAMERA_WIDTH */
+    rotate_frame(bgr565.memory, Image_buf_bgr565_rotated);
+    ifx_image_conv_RGB565_to_RGB888(Image_buf_bgr565_rotated, CAMERA_HEIGHT, CAMERA_WIDTH,
+            Image_buf_bgr888, IMAGE_WIDTH, IMAGE_HEIGHT);
+#else
     ifx_image_conv_RGB565_to_RGB888(bgr565.memory, CAMERA_WIDTH, CAMERA_HEIGHT,
             Image_buf_bgr888, IMAGE_WIDTH, IMAGE_HEIGHT);
+#endif /* USE_KIT_PSE84_HMI */
 
     float time_draw_end = get_time_in_ms();
 
 #ifdef ENABLE_WEB_STREAMING
     /* CHUNKED STREAMING: Quick push of frame (JPEG encodes immediately, no race)
-     * Only JPEG encoding happens here (~30ms), then UART task sends chunks
-     * No race condition because we compress entire frame before returning */
+    * Only JPEG encoding happens here (~30ms), then UART task sends chunks
+    * No race condition because we compress entire frame before returning */
     extern bool chunked_stream_is_active(void);
     extern bool chunked_stream_push_frame(const uint16_t *rgb565);
     if (chunked_stream_is_active())
@@ -1972,6 +2110,11 @@ void cm55_ns_gfx_task(void *arg)
     float time_model_start = 0.0f;
     float time_model_end = 0.0f;
 
+    #if defined(USE_KIT_PSE84_HMI)
+    /* clear the stale pixel data */
+    memset((void *)contiguous_mem, 0, FRAME_BUFFER_SIZE * 2U);
+    #endif
+
     /* Set frame buffer address to the GFXSS configuration structure */
     GFXSS_config.dc_cfg->gfx_layer_config->buffer_address    = (gctADDRESS *) vglite_heap_base;
     GFXSS_config.dc_cfg->gfx_layer_config->uv_buffer_address = (gctADDRESS *) vglite_heap_base;
@@ -2006,6 +2149,22 @@ void cm55_ns_gfx_task(void *arg)
     Cy_GFXSS_Enable_GPU_Interrupt(base);
     NVIC_EnableIRQ(GFXSS_GPU_IRQ);        /* Enable GPU interrupt in NVIC. */
 
+    #if defined(USE_KIT_PSE84_HMI)
+    cy_rslt_t result;
+    /* Set initial brightness level to 100% */
+    uint8_t brightness_level = 100; 
+
+    result = mtb_display_st7701s_init(GFXSS_GFXSS_MIPIDSI, &st7701s_backlight_cfg);
+
+    if (CY_RSLT_SUCCESS != result)
+    {
+        printf("ST7701S 4-Inch display init failed with status = %u\r\n", (unsigned int) result);
+        CY_ASSERT(NUM_CY_ASSERT_VALUE);
+    }
+
+    mtb_display_st7701s_set_brightness(brightness_level);
+
+    #else
     cy_en_scb_i2c_status_t i2c_result = CY_SCB_I2C_SUCCESS;
 
     /* Initialize the I2C in controller mode. */
@@ -2037,7 +2196,7 @@ void cm55_ns_gfx_task(void *arg)
     Cy_SCB_I2C_Enable(DISPLAY_I2C_CONTROLLER_HW);
 
     /* Allow I2C to be stabalized to initialize the display */
-    Cy_SysLib_Delay(200);
+    Cy_SysLib_Delay(I2C_DELAY_MS);
 
     i2c_result = mtb_disp_waveshare_4p3_init(DISPLAY_I2C_CONTROLLER_HW,
             &disp_i2c_controller_context);
@@ -2049,6 +2208,7 @@ void cm55_ns_gfx_task(void *arg)
         CY_ASSERT(NUM_CY_ASSERT_VALUE);
 #endif
     }
+    #endif
 
     /* Set the display size for LCD utils */
     ifx_lcd_set_Display_size(DISPLAY_W, DISPLAY_H);
@@ -2123,7 +2283,7 @@ void cm55_ns_gfx_task(void *arg)
     float scale_Cam2Disp_x = (float)DISPLAY_W / (float)CAMERA_WIDTH;
     float scale_Cam2Disp_y = (float)DISPLAY_H / (float)CAMERA_HEIGHT;
     /* this decides if you want to display the whole image and add boundaries (min),
-     or display with no boundaries but crop off some of the image (camera vs display aspect ratio mismatch handling) */
+    or display with no boundaries but crop off some of the image (camera vs display aspect ratio mismatch handling) */
 
     scale_Cam2Disp = max(scale_Cam2Disp_x, scale_Cam2Disp_y);  /* 4.3" uses max to fill screen */
 
@@ -2138,6 +2298,16 @@ void cm55_ns_gfx_task(void *arg)
     display_offset_y = (DISPLAY_H - scale_Cam2Disp * CAMERA_HEIGHT) / 2;
 
     vg_lite_translate(translate_x, translate_y, &matrix);
+
+#ifdef USE_KIT_PSE84_HMI
+    /* Override matrix: define the rotation matrix (90 degrees) and apply vertical flip */
+    vg_lite_identity(&matrix);
+    vg_lite_translate(ROTATE_MATRIX_X, ROTATE_MATRIX_Y, &matrix);
+    vg_lite_rotate(ROTATE_ANGLE, &matrix);
+    vg_lite_scale(FLIP_MATRIX_X, FLIP_MATRIX_Y, &matrix);
+    vg_lite_translate(-ROTATE_MATRIX_X, -ROTATE_MATRIX_Y, &matrix);
+    vg_lite_scale(scale_Cam2Disp, scale_Cam2Disp, &matrix);
+#endif /* USE_KIT_PSE84_HMI */
 
     touch_input_dev_init();
 
@@ -2267,8 +2437,8 @@ void cm55_ns_gfx_task(void *arg)
     ifx_faceid_rslt_t current_enrollment_feedback = IFX_FACEID_RSLT_SUCCESS;
 
     /* Delay for USB enumeration to complete before rendering
-     * data to the display
-     */
+    * data to the display
+    */
     vTaskDelay(pdMS_TO_TICKS(1200));
 
     printf("[LCD_TASK] Starting while loop for model inference ...\n");
@@ -2287,10 +2457,10 @@ void cm55_ns_gfx_task(void *arg)
 
 #ifdef ENABLE_WEB_STREAMING
             /* When UART streaming: Run Face ID but skip LCD rendering to maximize FPS
-             * Face ID inference: ~25-30ms (fast enough)
-             * LCD rendering: ~50-100ms (V-sync bottleneck)
-             * This gives best of both worlds: face recognition + high FPS streaming
-             * NOTE: Frame capture now happens inside getInputImage() BEFORE buffer is cleared */
+            * Face ID inference: ~25-30ms (fast enough)
+            * LCD rendering: ~50-100ms (V-sync bottleneck)
+            * This gives best of both worlds: face recognition + high FPS streaming
+            * NOTE: Frame capture now happens inside getInputImage() BEFORE buffer is cleared */
             bool is_uart_streaming = chunked_stream_is_active();
 
 #endif
@@ -2347,8 +2517,8 @@ void cm55_ns_gfx_task(void *arg)
                             {
                                 int pose_idx = ifx_face_id_get_pose_bin_index(&enrollment_config, prediction.yaw[0], prediction.pitch[0], prediction.roll[0]);
                                 printf("[ENROLL_REF] Yaw=%.1f, Pitch=%.1f, Roll=%.1f -> Pose=%d\n",
-                                       (double)prediction.yaw[0], (double)prediction.pitch[0], (double)prediction.roll[0], pose_idx);
-                                if (pose_idx >= 0 && pose_idx < progress.num_poses) {
+                                    (double)prediction.yaw[0], (double)prediction.pitch[0], (double)prediction.roll[0], pose_idx);
+                                if ((uint32_t)pose_idx < (uint32_t)progress.num_poses) {
                                     current_pose = (uint8_t)pose_idx;
                                 }
                             }
@@ -2378,11 +2548,11 @@ void cm55_ns_gfx_task(void *arg)
                             for (int i = 0; i < progress.num_poses && i < MAX_ENROLLMENT_POSES; i++)
                             {
                                 pose_progress[i] = (progress.enroll_progress[i] == PROGRESS_COMPLETED) ? 100 :
-                                                  (progress.enroll_progress[i] == PROGRESS_IN_PROGRESS) ? 50 : 0;
+                                                (progress.enroll_progress[i] == PROGRESS_IN_PROGRESS) ? 50 : 0;
                             }
 
                             chunked_stream_push_enrollment_progress(2, current_pose, progress.num_poses,
-                                                                   progress_percent, pose_progress, user_name);
+                                                                progress_percent, pose_progress, user_name);
                         }
 #endif
                     }
@@ -2415,8 +2585,8 @@ void cm55_ns_gfx_task(void *arg)
                         {
                             int pose_idx = ifx_face_id_get_pose_bin_index(&enrollment_config, prediction.yaw[0], prediction.pitch[0], prediction.roll[0]);
                             printf("[ENROLL] Yaw=%.1f, Pitch=%.1f, Roll=%.1f -> Pose=%d\n",
-                                   (double)prediction.yaw[0], (double)prediction.pitch[0], (double)prediction.roll[0], pose_idx);
-                            if (pose_idx >= 0 && pose_idx < progress.num_poses)
+                                (double)prediction.yaw[0], (double)prediction.pitch[0], (double)prediction.roll[0], pose_idx);
+                            if ((uint32_t)pose_idx < (uint32_t)progress.num_poses)
                             {
                                 current_pose = (uint8_t)pose_idx;
                             }
@@ -2447,11 +2617,11 @@ void cm55_ns_gfx_task(void *arg)
                         for (int i = 0; i < progress.num_poses && i < MAX_ENROLLMENT_POSES; i++)
                         {
                             pose_progress[i] = (progress.enroll_progress[i] == PROGRESS_COMPLETED) ? 100 :
-                                              (progress.enroll_progress[i] == PROGRESS_IN_PROGRESS) ? 50 : 0;
+                                            (progress.enroll_progress[i] == PROGRESS_IN_PROGRESS) ? 50 : 0;
                         }
 
                         chunked_stream_push_enrollment_progress(2, current_pose, progress.num_poses,
-                                                               progress_percent, pose_progress, user_name);
+                                                            progress_percent, pose_progress, user_name);
                     }
 #endif
                     current_enrollment_feedback = enroll_result;  /* Store feedback */
@@ -2492,7 +2662,7 @@ void cm55_ns_gfx_task(void *arg)
                             char user_name[20];
                             snprintf(user_name, sizeof(user_name), "User_%d", current_user_count - 1);  /* -1 because count was just incremented */
                             chunked_stream_push_enrollment_progress(4, progress.num_poses, progress.num_poses,
-                                                                   100, progress.enroll_progress, user_name);
+                                                                100, progress.enroll_progress, user_name);
 #endif
                         }
                         else if (ifx_result == IFX_FACEID_RSLT_DB_FULL)
@@ -2672,8 +2842,8 @@ void cm55_ns_gfx_task(void *arg)
                 /* If already in the collecting state, complete enrolment */
 #ifdef ENABLE_WEB_STREAMING
                 else if ((enrollment_state == ENROLLMENT_STATE_COLLECTING &&
-                         enrollment_type == ENROLLMENT_TYPE_ON_DEVICE) ||
-                         (force_complete && enrollment_state == ENROLLMENT_STATE_COLLECTING))
+                        enrollment_type == ENROLLMENT_TYPE_ON_DEVICE) ||
+                        (force_complete && enrollment_state == ENROLLMENT_STATE_COLLECTING))
 #else
                 else if (enrollment_state == ENROLLMENT_STATE_COLLECTING &&
                         enrollment_type == ENROLLMENT_TYPE_ON_DEVICE)
@@ -2775,8 +2945,8 @@ void cm55_ns_gfx_task(void *arg)
 
 #ifdef ENABLE_WEB_STREAMING
             /* Skip LCD rendering when UART streaming to maximize FPS
-             * LCD rendering + V-sync takes 50-100ms, limiting to 10-20 FPS
-             * Face ID results still computed and available over UART */
+            * LCD rendering + V-sync takes 50-100ms, limiting to 10-20 FPS
+            * Face ID results still computed and available over UART */
             if (!is_uart_streaming)
             {
 #endif
@@ -2831,8 +3001,8 @@ void cm55_ns_gfx_task(void *arg)
 #ifdef ENABLE_WEB_STREAMING
             }
             /* Send complete Face ID metadata AFTER inference (separate from image)
-             * Image frame was already queued right after getInputImage()
-             * Send metadata ALWAYS to report detection status (even 0 faces) */
+            * Image frame was already queued right after getInputImage()
+            * Send metadata ALWAYS to report detection status (even 0 faces) */
             if (is_uart_streaming && ifx_result == IFX_FACEID_RSLT_SUCCESS)
             {
                 /* Build Face ID metadata array (max 4 faces) */
@@ -2863,7 +3033,7 @@ void cm55_ns_gfx_task(void *arg)
                     /* Extract user ID (-1 = unknown, >=0 = recognized) */
                     faces[i].user_id = prediction.id[i];
 
-                    /* Extract confidence (convert float 0-1 to uint16 × 1000) */
+                    /* Extract confidence (convert float 0-1 to uint16 x 1000) */
                     /* Use similarity for recognized faces, conf for detection quality */
                     if (prediction.id[i] >= 0)
                     {
@@ -2883,7 +3053,7 @@ void cm55_ns_gfx_task(void *arg)
                 }
 
                 /* Send complete Face ID response via chunked protocol
-                 * Includes: total faces, known faces, all bounding boxes, user IDs, names, confidence */
+                * Includes: total faces, known faces, all bounding boxes, user IDs, names, confidence */
                 bool metadata_sent = chunked_stream_push_faceid(num_faces, faces);
 
                 /* Debug: Log Face ID results and transmission status */
@@ -2896,8 +3066,8 @@ void cm55_ns_gfx_task(void *arg)
                     frame_with_faces++;
                     if ((frame_with_faces % 30) == 1) {  /* Log every 30 frames with faces */
                         printf("[Face ID] Frame %" PRIu32 ": %d faces (%d known, %d unknown) - Metadata %s\r\n",
-                               frame_with_faces, num_faces, known_faces, num_faces - known_faces,
-                               metadata_sent ? "SENT" : "FAILED");
+                            frame_with_faces, num_faces, known_faces, num_faces - known_faces,
+                            metadata_sent ? "SENT" : "FAILED");
                     }
                 }
                 else
@@ -2906,7 +3076,7 @@ void cm55_ns_gfx_task(void *arg)
                     if ((frame_count % 100) == 1)
                     {
                         printf("[Face ID] Frame %" PRIu32 ": No faces detected - Metadata %s\r\n",
-                               frame_count, metadata_sent ? "SENT" : "FAILED");
+                            frame_count, metadata_sent ? "SENT" : "FAILED");
                     }
                 }
             }

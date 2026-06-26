@@ -3,6 +3,7 @@
 This code example showcases Infineon’s comprehensive real-time face ID solution on the PSOC&trade; Edge MCU, interfacing with a USB camera and a 4.3-inch MIPI DSI display to support on-device face enrolment and recognition; it highlights detected human faces by drawing bounding boxes and overlaying either the enrolled user ID or “unknown” text in case of non-enrolled users on the live video stream at 30 frames per second (FPS), while simultaneously displaying all FaceID model prediction scores on the display with model inference running at approximately 30 FPS.
 
 This code example has a three project structure: CM33 secure, CM33 non-secure, and CM55 projects. All three projects are programmed to the external QSPI flash and executed in Execute in Place (XIP) mode. Extended boot launches the CM33 secure project from a fixed location in the external flash, which then configures the protection settings and launches the CM33 non-secure application. Additionally, CM33 non-secure application enables CM55 CPU and launches the CM55 application. The CM55 application implements the logic for handling the USB webcam, VGLite graphics, and faceID inference.
+> **Note:** On the KIT_PSE84_HMI, all three projects are programmed to the external OSPI flash instead of QSPI.
 
 This code example supports the following MIPI DSI display and USB cameras:
 
@@ -10,19 +11,22 @@ This code example supports the following MIPI DSI display and USB cameras:
 - [HBVCAM OV7675 0.3MP Camera](https://www.hbvcamera.com/0-3mp-pixel-usb-cameras/hbvcam-ov7675-0.3mp-mini-laptop-camera-module.html)
 - [HBVCAM OS02F10 2MP Camera](https://www.hbvcamera.com/2-mega-pixel-usb-cameras/2mp-1080p-auto-focus-hd-usb-camera-module-for-atm-machine.html)
 - [Logitech C920 HD Pro Webcam](https://www.logitech.com/en-ch/shop/p/c920-pro-hd-webcam)
+- [ST7701S 4-inch MIPI DSI display](https://www.rocktech.com.hk/lcd-product/rk040hf001)
+
+> **Note:** By default, KIT_PSE84_HMI is shipped with the ST7701S 4-inch MIPI DSI display and the HBVCAM OV7675 0.3MP camera. Support for other displays and cameras is not available on KIT_PSE84_HMI. The ST7701S 4-inch MIPI DSI display is supported only on KIT_PSE84_HMI.
 
 > **Note:** Although model inference runs at ~30 FPS, the overall application runs at ~10 FPS due to memory constraints on PSOC&trade; Edge E84 MCU.
 
 [View this README on GitHub.](https://github.com/Infineon/mtb-example-psoc-edge-ml-face-id)
 
-[Provide feedback on this code example.](https://yourvoice.infineon.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDIxODciLCJTcGVjIE51bWJlciI6IjAwMi00MjE4NyIsIkRvYyBUaXRsZSI6IlBTT0MmdHJhZGU7IEVkZ2UgTUNVOiBNYWNoaW5lIGxlYXJuaW5nIC0gZmFjZSBJRCBkZW1vIiwicmlkIjoic2FuamVldi5tYWp1bWRhckBpbmZpbmVvbi5jb20iLCJEb2MgdmVyc2lvbiI6IjEuMi4wIiwiRG9jIExhbmd1YWdlIjoiRW5nbGlzaCIsIkRvYyBEaXZpc2lvbiI6Ik1DRCIsIkRvYyBCVSI6IklDVyIsIkRvYyBGYW1pbHkiOiJQU09DIn0=)
+[Provide feedback on this code example.](https://yourvoice.infineon.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDIxODciLCJTcGVjIE51bWJlciI6IjAwMi00MjE4NyIsIkRvYyBUaXRsZSI6IlBTT0MmdHJhZGU7IEVkZ2UgTUNVOiBNYWNoaW5lIGxlYXJuaW5nIC0gZmFjZSBJRCBkZW1vIiwicmlkIjoic2FuamVldi5tYWp1bWRhckBpbmZpbmVvbi5jb20iLCJEb2MgdmVyc2lvbiI6IjEuMy4wIiwiRG9jIExhbmd1YWdlIjoiRW5nbGlzaCIsIkRvYyBEaXZpc2lvbiI6Ik1DRCIsIkRvYyBCVSI6IklDVyIsIkRvYyBGYW1pbHkiOiJQU09DIn0=)
 
 See the [Design and implementation](docs/design_and_implementation.md) for the functional description of this code example.
 
 ## Requirements
 
-- [ModusToolbox&trade;](https://www.infineon.com/modustoolbox) v3.7 or later (tested with v3.7)
-- Board support package (BSP) minimum required version: 1.1.0
+- [ModusToolbox&trade;](https://www.infineon.com/modustoolbox) v3.7 or later (tested with v3.8)
+- Board support package (BSP) minimum required version: 1.3.0
 - Programming language: C
 - Associated parts: All [PSOC&trade; Edge MCU](https://www.infineon.com/products/microcontroller/32-bit-psoc-arm-cortex/32-bit-psoc-edge-arm) parts
 
@@ -38,6 +42,7 @@ See the [Design and implementation](docs/design_and_implementation.md) for the f
 - [PSOC&trade; Edge E84 Evaluation Kit](https://www.infineon.com/KIT_PSE84_EVAL) (`KIT_PSE84_EVAL_EPC2`) – Default value of `TARGET`
 - [PSOC&trade; Edge E84 Evaluation Kit](https://www.infineon.com/KIT_PSE84_EVAL) (`KIT_PSE84_EVAL_EPC4`)
 - [PSOC&trade; Edge E84 AI Kit](https://www.infineon.com/KIT_PSE84_AI) (`KIT_PSE84_AI`)
+- [PSOC&trade; Edge E84 HMI Kit](https://www.infineon.com/KIT_PSE84_HMI) (`KIT_PSE84_HMI`)
 
 ## Hardware setup
 
@@ -45,7 +50,7 @@ This example uses the board's default configuration. See the kit user guide to e
 
 Ensure the following jumper and pin configuration on board:
 - BOOT SW are in the HIGH/ON position
-- J20 and J21 are in the tristate/not connected (NC) position
+- J20 and J21 are in the tristate/not connected (NC) position for the PSOC&trade; Edge E84 Evaluation Kit
 
 > **Note:** This hardware setup is not required for the KIT_PSE84_AI kit.
 
@@ -72,6 +77,15 @@ PSOC&trade; Edge E84 AI Kit                     | J2
 
    ![](images/display-kit-connection.png)
    **Figure 1.  Display connection with PSOC&trade; Edge E84 evaluation kit**
+
+### Supported display for KIT_PSE84_HMI
+
+ST7701S 4-inch MIPI DSI 512x480 pixel display (RK040HF001) display is by default shipped with PSOC&trade; Edge E84 HMI Kit.
+
+   **Figure 2. 4-inch MIPI DSI 512x480 pixel display**
+
+   ![](images/hmi_kit_image.png)
+
 
 <br>
 
@@ -226,6 +240,7 @@ Document title: *CE242187* – *PSOC&trade; Edge MCU: Machine learning - face ID
  1.0.0   | GitHub release
  1.1.0   | Updated design files to fix ModusToolbox&trade; v3.7 build warnings
  1.2.0   | Added web streaming functionality for KIT_PSE84_AI
+ 1.3.0   | Added support for KIT_PSE84_HMI
 <br>
 
 

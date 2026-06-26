@@ -117,6 +117,7 @@ extern "C" {
 #define FID_HOME_CANCLE_ENROLLMENT      ((uint8_t)0x02)
 #define FID_HOME_CLEAR_ENROLLED_USERS   ((uint8_t)0x03)
 
+#ifndef USE_KIT_PSE84_HMI
 /*******************************************************************************
 * Global Variables
 *******************************************************************************/
@@ -124,6 +125,8 @@ void OOB_UartCMD_Task(void *args);
 extern volatile uint8_t g_oob_current_app_id;
 void OOB_CommandFeedback(uint8_t seq, uint8_t app, uint8_t opcode, bool success);
 void uart_de_init( void );
+
+#endif /* USE_KIT_PSE84_HMI */
 
 #ifdef __cplusplus
 }
